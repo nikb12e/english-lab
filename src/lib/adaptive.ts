@@ -1,8 +1,8 @@
-// Prilagodljivi del algoritma.
-// 1) Vsak glagol ima oceno težavnosti (b) iz lastnosti: pogostost, vzorec, nepravilnost, zamenljivost, alternativne oblike.
-// 2) Uporabnik ima sposobnost θ (Elo/Rasch). Po vsakem prvem odgovoru se θ in b posodobita.
-// 3) Novi glagoli se izbirajo tako, da je verjetnost uspeha blizu cilja (»koristna težavnost«), lahki pa se po uvrstitvi preskočijo.
-// 4) Tip naloge se izbere glede na stabilnost spomina: od podprtega priklica do stavkov, lova na napake in nareka.
+// The adaptive part of the algorithm.
+// 1) Every verb has a difficulty estimate (b) from its features: frequency, pattern, irregularity, confusability, alternative forms.
+// 2) The user has an ability θ (Elo/Rasch). After every first answer θ and b are updated.
+// 3) New verbs are chosen so the probability of success is close to the target (“desirable difficulty”), easy ones are skipped after placement.
+// 4) The task type is chosen by memory stability: from supported recall to sentences, spotting mistakes and dictation.
 
 import { VERBS, type Verb } from './verbs'
 import { lev } from './check'
@@ -10,15 +10,15 @@ import type { MemState } from './fsrs'
 
 const CONFUSABLE = new Set(['lie', 'lay', 'rise', 'arise', 'fall', 'feel', 'find', 'wind', 'wake', 'awake', 'bear', 'strew', 'sew', 'sow', 'shine', 'spit', 'spill', 'spoil', 'tread', 'stride', 'strive', 'slink', 'sling', 'sting', 'stink', 'swing', 'sink', 'shrink', 'spring', 'lead', 'lend', 'leave', 'lose', 'loose', 'hang', 'heave', 'hew', 'beseech', 'bereave', 'cling', 'fling', 'smite', 'slay', 'stick'])
 
-/** Težavnost glagola na lestvici θ (približno −2 lahko … +2.5 brutalno). */
+/** Verb difficulty on the θ scale (about −2 easy … +2.5 brutal). */
 export function verbPrior(v: Verb): number {
   const a = v.shown.inf[0], b = v.shown.past[0], c = v.shown.pp[0]
   let d = -1.6
-  d += (v.tier - 1) * 1.05 // redkost
+  d += (v.tier - 1) * 1.05 // rarity
   d += { AAA: -0.35, AAB: 0.25, ABA: 0.1, ABB: 0.15, ABC: 0.55 }[v.type]
-  d += Math.min(1.2, (lev(a, b) + lev(a, c)) * 0.12) // koliko se obliki razlikujeta
+  d += Math.min(1.2, (lev(a, b) + lev(a, c)) * 0.12) // how much the two forms differ
   if (CONFUSABLE.has(v.id)) d += 0.45
-  if (v.shown.past.length > 1 || v.shown.pp.length > 1) d += 0.3 // dve obliki na listu
+  if (v.shown.past.length > 1 || v.shown.pp.length > 1) d += 0.3 // two forms on the sheet
   if (/(ought|aught)$/.test(b)) d += 0.15
   if (v.note) d += 0.2
   return Math.round(d * 100) / 100
@@ -27,15 +27,15 @@ export const PRIOR: Record<string, number> = Object.fromEntries(VERBS.map((v) =>
 
 export const pSuccess = (theta: number, b: number) => 1 / (1 + Math.exp(-(theta - b) * 1.25))
 
-/** Elo posodobitev. Vrne nov θ in nov b. */
+/** Elo update. Returns the new θ and the new b. */
 export function updateAbility(theta: number, b: number, ok: boolean, n: number) {
   const p = pSuccess(theta, b)
-  const k = Math.max(0.12, 0.6 / Math.sqrt(1 + n / 8)) // na začetku se hitro uči, nato umiri
+  const k = Math.max(0.12, 0.6 / Math.sqrt(1 + n / 8)) // learns fast at first, then settles
   const r = ok ? 1 : 0
   return { theta: theta + k * (r - p), b: b - 0.25 * k * (r - p) }
 }
 
-/** CEFR-ish oznaka za θ, da je napredek berljiv. */
+/** CEFR-ish label for θ so progress is readable. */
 export function levelOf(theta: number) {
   const steps: [number, string][] = [[-1.2, 'A2'], [-0.4, 'B1'], [0.4, 'B2'], [1.2, 'C1'], [99, 'C2']]
   return steps.find(([t]) => theta < t)![1]
@@ -43,17 +43,17 @@ export function levelOf(theta: number) {
 export const rating = (theta: number) => Math.round(1000 + theta * 200)
 
 export type Difficulty = 'normal' | 'hard' | 'brutal'
-// cilj za nove glagole: okoli 75 % verjetnost uspeha (skupaj s ponovitvami da približno 80 % pravilnih odgovorov)
+// target for new verbs: about 75 % probability of success (together with reviews this gives roughly 80 % correct answers)
 const TARGET: Record<Difficulty, number> = { normal: 0.75, hard: 0.64, brutal: 0.55 }
 
-/** Izbor novih glagolov: najbližje ciljni verjetnosti uspeha, z rahlim naključjem. */
+/** Choosing new verbs: closest to the target probability of success, with a little randomness. */
 export function pickNewVerbs(theta: number, items: Record<string, MemState>, bOf: (id: string) => number, n: number, diff: Difficulty): Verb[] {
   const t = TARGET[diff]
   const ranked = VERBS.filter((v) => !items['v:' + v.id]?.reps)
     .map((v) => ({ v, s: Math.abs(pSuccess(theta, bOf(v.id)) - t) + Math.random() * 0.06 }))
     .sort((a, b) => a.s - b.s)
     .slice(0, n * 3)
-  // prepletanje: skupina naj meša vzorce (AAA, ABB, ABC …), ker razlikovanje med podobnimi oblikami utrdi znanje bolj kot bloki istega vzorca
+  // interleaving: a group should mix patterns (AAA, ABB, ABC …), because telling similar forms apart builds knowledge better than blocks of the same pattern
   const out: Verb[] = []
   const used: Record<string, number> = {}
   while (out.length < n && ranked.length) {
@@ -66,7 +66,7 @@ export function pickNewVerbs(theta: number, items: Record<string, MemState>, bOf
   return out
 }
 
-/** Uvrstitveni test: 14 glagolov, razporejenih po težavnosti od lažjih proti težjim. */
+/** Placement test: 14 verbs ordered by difficulty from easier to harder. */
 export function placementVerbs(bOf: (id: string) => number): Verb[] {
   const sorted = VERBS.slice().sort((a, b) => bOf(a.id) - bOf(b.id))
   const out: Verb[] = []
@@ -80,16 +80,16 @@ export function placementVerbs(bOf: (id: string) => number): Verb[] {
 
 export type VerbTask = 'forms' | 'inf' | 'reverse' | 'context' | 'hunt' | 'listen' | 'si' | 'fix' | 'odd' | 'pick' | 'build' | 'dictate' | 'match'
 
-/** Tok seje: −1 = trenutno ti ne gre (lažje, podprte naloge), 0 = normalno, +1 = gre ti odlično (težji tipi).
- *  Nastavlja ga seja po zadnjih odgovorih; vpliva na vse naslednje izbire tipov. */
+/** Session flow: −1 = it is not going well right now (easier, supported tasks), 0 = normal, +1 = going great (harder types).
+ *  Set by the session from the latest answers; affects all following type choices. */
 let FLOW: -1 | 0 | 1 = 0
 export const setFlow = (f: -1 | 0 | 1) => { FLOW = f }
 export const getFlow = () => FLOW
 
 const EASY = new Set<VerbTask>(['forms', 'inf', 'pick', 'build', 'match'])
 
-/** Tip naloge glede na stabilnost spomina, raven težavnosti in tok seje (»zaželena težavnost«):
- *  novi in šibki glagoli dobijo prepoznavanje in podprt priklic, utrjeni pa priklic v stavku, narek in lov na napake. */
+/** Task type by memory stability, difficulty level and session flow (“desirable difficulty”):
+ *  new and weak verbs get recognition and supported recall, mastered ones get recall in a sentence, dictation and spotting mistakes. */
 export function pickTask(c: MemState | undefined, diff: Difficulty, hasSentence: boolean, canListen: boolean, flow: -1 | 0 | 1 = FLOW): VerbTask {
   const S = c?.reps ? c.S : 0
   const r = Math.random()
@@ -108,7 +108,7 @@ export function pickTask(c: MemState | undefined, diff: Difficulty, hasSentence:
     ['pick', hs * (S < 3 ? 1.5 : 0.4)],
     ['fix', hs * (S >= 3 ? 2 : 0)],
     ['odd', S >= 2 ? 0.8 : 0],
-    // novi tipi: sestavi poved (prepoznavanje + besedni red), poveži pare (hitro, zabavno), narek (posluh + črkovanje)
+    // new types: build the sentence (recognition + word order), match pairs (fast, fun), dictation (listening + spelling)
     ['build', hs * (S < 6 ? 2 : 0.8)],
     ['match', S >= 0.5 ? 1.3 : 0],
     ['dictate', canListen && hasSentence && S >= 2 ? 1.6 : 0],
@@ -124,7 +124,7 @@ export function pickTask(c: MemState | undefined, diff: Difficulty, hasSentence:
   return 'forms'
 }
 
-// ───────── lažne oblike za »lov na napako« ─────────
+// ───────── fake forms for “spot the mistake” ─────────
 function regular(v: string) {
   if (v.endsWith('e')) return v + 'd'
   if (/[^aeiou]y$/.test(v)) return v.slice(0, -1) + 'ied'
@@ -134,7 +134,7 @@ function regular(v: string) {
 }
 const VOWEL_SWAPS: [RegExp, string][] = [[/i(n[gk])$/, 'a$1'], [/i(n[gk])$/, 'u$1'], [/ee/, 'e'], [/ea/, 'o'], [/i/, 'a'], [/ow$/, 'ew'], [/ear$/, 'ore']]
 
-/** Vrne prepričljivo napačno obliko (ne sme biti sprejeta). */
+/** Returns a convincing wrong form (must not be accepted). */
 export function fakeForm(v: Verb, f: 'past' | 'pp'): string {
   const ok = v.accept[f]
   const cands: string[] = []

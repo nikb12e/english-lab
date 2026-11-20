@@ -2,7 +2,9 @@
 
 English practice app for Slovenian students: all 196 irregular verbs, grammar drills, test style checks and spaced repetition that keeps bringing back what you got wrong.
 
-This is the **open source, offline build** of [English Lab](https://english.xtrslab.com). It runs entirely in the browser: no accounts, no server, no API keys, no external services. Progress is saved in `localStorage`.
+This is the **open source build** of [English Lab](https://english.xtrslab.com). It runs entirely in the browser: no accounts, no server and no API keys built in. Progress is saved in `localStorage`. The interface is in English; verb meanings and a few translation tasks stay in Slovenian, because the app trains Slovenian speakers.
+
+AI features are **optional**: add your own OpenRouter, Anthropic or OpenAI key in Settings and they switch on. Without a key everything else works offline.
 
 <p align="center">
   <img src="docs/home.png" width="280" alt="Home screen">
@@ -20,6 +22,7 @@ This is the **open source, offline build** of [English Lab](https://english.xtrs
 * **Arena**: 8 fast questions against bots with realistic skill levels and timing
 * **Grammar banks**: present tenses, articles, nouns, vocabulary for tests
 * **Weak spot tracking**: mistakes come back as similar tasks until they stick
+* **Bring your own AI key** (OpenRouter, Anthropic or OpenAI): fresh test items, “Why is it wrong?” explanations, grading of explanations and writing, smarter answer checking
 * Installable PWA, works offline after the first load
 
 ## What is different from the hosted version
@@ -27,12 +30,31 @@ This is the **open source, offline build** of [English Lab](https://english.xtrs
 | Hosted version | Open source build |
 |---|---|
 | Accounts (Google, email code) and cloud sync | No accounts, progress stays in this browser |
-| AI grading of explanations and essays | Disabled, tasks use built in answer checking |
-| AI generated fresh test items | Uses the bundled test bank |
+| AI on the server, paid by the app | AI with your own key, called straight from your browser |
+| AI generated fresh test items | Bundled test bank, plus fresh items when a key is set |
 | Natural voice recordings | Browser speech synthesis |
 | Weekly league and live multiplayer Arena | Arena against bots only |
 
 The server layer was replaced by a small local module (`src/lib/supabase.ts`) with the same interface, so the rest of the code is unchanged and easy to read.
+
+## AI with your own key
+
+Open **Settings → AI features**, pick a provider, paste your key and press **Test and save**.
+
+<p align="center"><img src="docs/ai-settings.png" width="280" alt="AI features settings"></p>
+
+| Provider | Default model | Where to get a key |
+|---|---|---|
+| OpenRouter | `openai/gpt-6-luna` | [openrouter.ai/keys](https://openrouter.ai/keys) |
+| Anthropic | `claude-haiku-5-5` | [console.anthropic.com](https://console.anthropic.com/settings/keys) |
+| OpenAI | `gpt-6-luna` | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) |
+
+You can type any other model ID your account has access to. How it works:
+
+* The key is stored only in your browser (`localStorage`) and sent only to the provider you picked, directly from the browser. No server of mine ever sees it.
+* Usage is billed to your own account with that provider. The app uses small, cheap models by default.
+* Anyone with access to the browser profile can read the key, so do not save it on a shared device. **Remove key** deletes it.
+* All calls live in `src/lib/llm.ts` (providers) and `src/lib/ai.ts` (prompts). Every AI feature falls back to offline behaviour on any error.
 
 ## Run it
 

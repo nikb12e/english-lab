@@ -1,48 +1,128 @@
-// Klici jezikovnega modela (GPT-6 Luna prek strežniške funkcije »ai«). Vse je neobvezno: brez prijave ali povezave
-// aplikacija dela naprej z vnaprej pripravljenimi nalogami in razlagami.
-import { supabase } from './supabase'
+// Language model calls with your own API key (OpenRouter, Anthropic or OpenAI, see lib/llm.ts). All of it is optional: without a key or a connection
+// the app keeps working with tasks and explanations prepared in advance.
+import { llmJson, llmReady } from './llm'
+import SECTIONS from '../data/aiSections.json'
 
-let down = 0
-async function call<T>(body: Record<string, unknown>, timeoutMs = 9000): Promise<T | null> {
-  if (Date.now() < down) return null
-  const { data: s } = await supabase.auth.getSession()
-  if (!s.session) return null
-  try {
-    const res = await Promise.race([
-      supabase.functions.invoke('ai', { body }),
-      new Promise<null>((r) => setTimeout(() => r(null), timeoutMs)),
-    ])
-    if (!res) return null
-    if (res.error) { down = Date.now() + 2 * 60_000; return null }
-    return res.data as T
-  } catch {
-    down = Date.now() + 2 * 60_000
-    return null
-  }
-}
+const clip = (s: unknown, n: number) => String(s ?? '').slice(0, n)
+const LEARNER = 'a Slovenian secondary-school learner of English (level B1 to B2)'
 
-export const aiAvailable = async () => !!(await supabase.auth.getSession()).data.session && Date.now() >= down
+/** True when the user has set up an AI provider in Settings. */
+export const aiAvailable = async () => llmReady()
+export const aiOn = () => llmReady()
 
 export interface Grading { score: 0 | 1 | 2; feedback: string; better: string }
-/** Oceni razlago v angleščini (naloga »Explain in English«). */
-export const gradeExplain = (term: string, model: string, answer: string) =>
-  call<Grading>({ action: 'grade', term, model, answer })
+/** Grades an explanation in English (the “Explain in English” task). */
+export async function gradeExplain(term: string, model: string, answer: string): Promise<Grading | null> {
+  if (!answer.trim()) return { score: 0, feedback: 'There is no answer.', better: model }
+  const g = await llmJson<{ score: number; feedback: string; better: string }>(
+    `You grade ${LEARNER}'s answer to the English test task "Explain in English". Be fair but strict like a teacher: 2 = meaning fully correct and understandable (small grammar slips allowed), 1 = partly correct or too vague, 0 = wrong, missing, or not written in English. Return JSON {"score":0|1|2,"feedback":"1 to 2 short sentences in simple English: what is right, what is missing or wrong","better":"a short model explanation in simple English, max 20 words"}`,
+    `Term: ${clip(term, 80)}\nReference meaning: ${clip(model, 300)}\nStudent answer: ${clip(answer, 400)}`,
+    { maxTokens: 500, temperature: 0 },
+  )
+  if (!g || typeof g.score !== 'number') return null
+  return { score: Math.max(0, Math.min(2, Math.round(g.score))) as 0 | 1 | 2, feedback: clip(g.feedback, 400), better: clip(g.better, 200) }
+}
 
-/** Kratka razlaga napake v slovenščini, prilagojena odgovoru, ki ga je dal učenec. */
-export const explainMistake = (task: string, given: string, correct: string, ctx = '') =>
-  call<{ text: string }>({ action: 'why', task, given, correct, ctx }, 12000)
+/** A short explanation of the mistake, tailored to the answer the learner gave. */
+export async function explainMistake(task: string, given: string, correct: string, ctx = ''): Promise<{ text: string } | null> {
+  const w = await llmJson<{ text: string }>(
+    `You are a patient English teacher for ${LEARNER}. Explain in simple English, in at most 3 short sentences, why the student's answer is wrong and how to recognise the right answer next time (rule, signal word or memory trick). Talk to the student directly. Do not repeat the whole task. Return JSON {"text":"..."}`,
+    `Task: ${clip(task, 400)}\nStudent answered: ${clip(given, 120)}\nCorrect answer: ${clip(correct, 160)}\nContext: ${clip(ctx, 400)}`,
+    { maxTokens: 400, temperature: 0.3, timeoutMs: 20_000 },
+  )
+  const text = clip(w?.text, 600).trim()
+  return text ? { text } : null
+}
 
 export interface GenItem { kind: 'type' | 'choice'; q: string; a?: string[]; options?: string[]; correct?: number; hint?: string; note?: string; diff?: number }
-/** Nove testne naloge za izbrano skupino (sveže, iz predpomnilnika na strežniku ali na novo ustvarjene). */
-export const freshItems = (sec: string, exclude: string[], fresh = false) =>
-  call<{ items: GenItem[] }>({ action: 'quiz', sec, exclude: exclude.slice(-300), fresh }, 30000)
+
+const TEST_SYS = `You write test items for a Slovenian secondary-school English class (level B1+ to B2, first year of upper secondary school).
+Items must match the style and difficulty of the teacher's mock test and handouts quoted below, often HARDER, never easier.
+Return ONLY JSON: {"items":[...]}. Each item:
+- "kind": "type" (student types the answer) or "choice" (student picks one option)
+- "q": the prompt in English exactly as on a test; use ___ for the single gap
+- for "type": "a": list of ALL acceptable answers (lowercase unless proper noun; include contractions/variants that a teacher accepts)
+- for "choice": "options": 2 to 4 strings, "correct": index of the right option
+- "hint": optional short hint (e.g. first letter and number of letters like "b___ (4)", or the base word in brackets); omit if not needed
+- "note": explanation in simple English for a student who got it wrong: the rule, why the answer is right, why the tempting wrong answer is wrong, 1 to 2 sentences
+- "diff": difficulty for a B1 student from 1 (very easy) to 5 (very hard)
+Rules: exactly one correct answer, unambiguous, natural British English, no duplicates, varied contexts, no answer leaked in the prompt.`
+
+const CHECK_SYS = 'You are a strict English teacher. Solve each test item. For "type" items give the single best answer; for "choice" give the index. If an item is ambiguous or has more than one correct answer, set "ok": false. Return JSON {"answers":[{"i":0,"answer":"...","index":0,"ok":true}]}'
+
+/** New test tasks for the chosen group, generated by the language model and checked by a second, independent solve. */
+export async function freshItems(sec: string, exclude: string[], live = false): Promise<{ items: GenItem[] } | null> {
+  const spec = (SECTIONS as Record<string, string>)[sec]
+  if (!spec || !llmReady()) return null
+  const n = live ? 5 : 8
+  const gen = await llmJson<{ items: GenItem[] }>(TEST_SYS,
+    `Section: ${spec}\nWrite ${n} new items, as hard as a real test. Do not repeat these prompts: ${exclude.slice(-40).join('; ')}`,
+    { maxTokens: live ? 3500 : 5000, temperature: 0.9, timeoutMs: 60_000 })
+  const items = (gen?.items || []).filter((it) => it && typeof it.q === 'string').slice(0, 10)
+  if (!items.length) return null
+  const probs = items.map((it, i) => ({ i, kind: it.kind, q: it.q, hint: it.hint, options: it.kind === 'choice' ? it.options : undefined }))
+  const chk = await llmJson<{ answers: { i: number; answer?: string; index?: number; ok?: boolean }[] }>(CHECK_SYS, JSON.stringify(probs), { maxTokens: 2500, temperature: 0, timeoutMs: 45_000 })
+  const ans = new Map((chk?.answers || []).map((a) => [a.i, a]))
+  const clean = (s: unknown) => String(s ?? '').replace(/\*+/g, '').trim()
+  const good = items.filter((it, i) => {
+    const a = ans.get(i)
+    if (!a || a.ok === false || !it.q) return false
+    if (it.kind === 'choice') return Array.isArray(it.options) && it.options.length >= 2 && it.options.length <= 4 && a.index === it.correct
+    const acc = (it.a || []).map((x) => String(x).trim().toLowerCase())
+    return acc.length > 0 && acc.includes(String(a.answer || '').trim().toLowerCase().replace(/\.$/, ''))
+  }).map((it): GenItem => {
+    const diff = typeof it.diff === 'number' ? Math.max(1, Math.min(5, Math.round(it.diff))) : undefined
+    const base = { q: clean(it.q).replace(/_{2,}/g, '___'), note: clean(it.note), hint: it.hint ? clean(it.hint) : undefined, diff }
+    return it.kind === 'choice'
+      ? { kind: 'choice', ...base, options: (it.options || []).map(clean), correct: it.correct }
+      : { kind: 'type', ...base, a: (it.a || []).map(clean) }
+  })
+  return { items: good }
+}
+
+const SENT_SYS = `You write practice sentences for Slovenian secondary-school students (B1 to B2) learning English irregular verbs. Return ONLY valid JSON.
+Rules: natural British English, varied everyday and school topics; exactly one gap written as ___ replacing exactly the required verb form (never write the form itself); "past" needs past simple with a clear past time signal; "pp" needs the past participle (present perfect, past perfect or passive) with the auxiliary outside the gap; 6 to 16 words; "sl" is a short lowercase Slovenian translation of the verb phrase (2 to 4 words).`
+
+/** New gap sentences for one verb form. */
+export async function genSentences(inf: string, form: 'past' | 'pp', slo: string, answers: string[], exclude: string[]): Promise<{ en: string; sl: string }[]> {
+  const out = await llmJson<{ items: { en: string; sl: string }[] }>(SENT_SYS,
+    `Verb: ${inf} (${clip(slo, 60)}). Required form in the gap (${form}): ${answers.join(' or ')}. Write 4 new sentences, different from: ${exclude.slice(0, 12).join(' | ')}. JSON: {"items":[{"en":"...","sl":"..."}]}`,
+    { maxTokens: 900, temperature: 0.9 })
+  return (out?.items || []).map((s) => {
+    let en = String(s.en || '').trim().replace(/["“”*]/g, '').replace(/_{2,}/g, '___')
+    if (!en.includes('___')) for (const a of answers) { const re = new RegExp(`\\b${a}\\b`, 'i'); if (re.test(en)) { en = en.replace(re, '___'); break } }
+    return { en, sl: String(s.sl || '').trim().toLowerCase().slice(0, 60) }
+  }).filter((s) => s.en.split('___').length === 2 && s.en.length >= 10 && s.en.length <= 200 && s.sl && !answers.some((a) => new RegExp(`\\b${a}\\b`, 'i').test(s.en.replace('___', ''))))
+}
 
 export interface WriteGrade { score: number; content: string; vocab: string; grammar: string; fixes: { wrong: string; right: string; why: string }[]; better: string }
-/** Oceni pisni sestavek po merilih s testa (vsebina, besedišče, slovnica), 0 do 10 točk, s popravki. */
-export const gradeWriting = (task: string, brief: string, text: string) =>
-  call<WriteGrade>({ action: 'write', task, brief, text }, 30000)
+/** Grades a written composition against the test criteria (content, vocabulary, grammar), 0 to 10 points, with corrections. */
+export async function gradeWriting(task: string, brief: string, text: string): Promise<WriteGrade | null> {
+  if (text.trim().split(/\s+/).length < 15) return null
+  const g = await llmJson<WriteGrade>(
+    `You are an experienced English teacher in a Slovenian upper secondary school (first year, B1 to B2). Grade the student's writing like on a real test, strictly but fairly, out of 10 points: content and task achievement (0-4), vocabulary range and accuracy, especially words from the topic handouts (0-3), grammar and spelling (0-3). Return JSON {"score":0-10,"content":"1 sentence in simple English","vocab":"1 sentence in simple English","grammar":"1 sentence in simple English","fixes":[{"wrong":"exact wrong phrase from the text","right":"corrected phrase","why":"very short reason in simple English"}],"better":"an improved version of 2-3 of the student's sentences in English"}. List at most 6 of the most important fixes; if the text is off-topic or not in English give a low score.`,
+    `Task: ${clip(task, 500)}\nGuidance: ${clip(brief, 300)}\nStudent text:\n${clip(text, 2500)}`,
+    { maxTokens: 1500, temperature: 0, timeoutMs: 60_000 },
+  )
+  if (!g || typeof g.score !== 'number') return null
+  const fixes = Array.isArray(g.fixes) ? g.fixes.slice(0, 6).map((f) => ({ wrong: clip(f.wrong, 120), right: clip(f.right, 120), why: clip(f.why, 160) })) : []
+  return { score: Math.max(0, Math.min(10, Math.round(g.score))), content: clip(g.content, 300), vocab: clip(g.vocab, 300), grammar: clip(g.grammar, 300), fixes, better: clip(g.better, 600) }
+}
 
 export interface Diag { accept: number; kind: 'typo' | 'form' | 'near' | 'wrong' | 'other' | string; conf: number }
-/** Jev (odločitveni model) presodi vpisani odgovor: je sprejemljiv (sinonim, različica) in kakšne vrste je napaka. ~0,2 s. */
-export const diagnose = (task: string, expected: string[], given: string) =>
-  call<Diag>({ action: 'diag', task, expected, given }, 6000)
+const diagCache = new Map<string, Diag>()
+/** Jev judges a typed answer: is it acceptable (synonym, variant) and what kind of mistake is it. */
+export async function diagnose(task: string, expected: string[], given: string): Promise<Diag | null> {
+  const k = `${task}|${given.toLowerCase()}|${expected.join('/')}`
+  const hit = diagCache.get(k)
+  if (hit) return hit
+  const d = await llmJson<{ accept: boolean; kind: string; confidence?: number }>(
+    `You check typed answers in an English test for ${LEARNER}. Decide if a teacher would accept the student's answer as fully correct (a valid synonym, spelling variant or equivalent form; ignore capital letters). Then classify the mistake: "typo" = the right word, only misspelled; "form" = the right word in the wrong grammatical form; "near" = a different word close in meaning; "wrong" = a different word with a different meaning; "other" = nonsense, incomplete, Slovene or unrelated. Return JSON {"accept":true|false,"kind":"typo|form|near|wrong|other","confidence":0-1}`,
+    `Task: ${clip(task, 400)}\nAccepted answers from the key: ${expected.slice(0, 6).join(' | ')}\nStudent's answer: ${clip(given, 80)}`,
+    { maxTokens: 200, temperature: 0, timeoutMs: 8000 },
+  )
+  if (!d) return null
+  const out: Diag = { accept: d.accept ? 0.9 : 0, kind: String(d.kind || 'wrong'), conf: typeof d.confidence === 'number' ? d.confidence : 0.7 }
+  diagCache.set(k, out)
+  return out
+}

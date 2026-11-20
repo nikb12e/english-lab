@@ -1,6 +1,6 @@
-// Križanka: mreža kot v aplikacijah za križanke. Namigi so slike (ilustracije besed z listov) ali besedilo z učnih listov.
-// Tipkaš s tipkovnico v aplikaciji (ali s pravo tipkovnico), izbrana beseda je obarvana, z dotikom iste celice zamenjaš smer.
-// Ob koncu se vsaka beseda s sliko zapiše v svoj spomin (FSRS) in v model šibkih točk, kot pri ostalih nalogah.
+// Crossword: a grid like in crossword apps. Clues are pictures (illustrations of words from the worksheets) or text from the worksheets.
+// You type with the in-app keyboard (or a real keyboard), the selected word is highlighted, tapping the same cell switches direction.
+// At the end every word with a picture is written to its own memory (FSRS) and to the weak point model, as with other tasks.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { X, ChevronLeft, ChevronRight, Lightbulb, CheckCheck, Eye, Delete, RotateCcw, Grid3x3, Check } from 'lucide-react'
@@ -23,7 +23,7 @@ const ROWS = ['QWERTYUIOP', 'ASDFGHJKL', 'ZXCVBNM']
 
 interface Res { w: XWord; ok: boolean; grade: Grade }
 
-/** Zapiše rezultat ene besede (spomin, šibke točke, XP, niz dni), enako kot odgovor v seji. */
+/** Records the result for one word (memory, weak points, XP, day streak), the same as an answer in a session. */
 function record(results: Res[], secs: number) {
   const st = getState()
   const now = Date.now()
@@ -130,7 +130,7 @@ export function Crossword({ onClose }: { onClose: () => void }) {
     setFill(f)
     if (wrong.has(cur)) { const s = new Set(wrong); s.delete(cur); setWrong(s) }
     sfx.key()
-    // beseda rešena: izgovori jo
+    // word solved: say it out loud
     grid.words.forEach((x, i) => {
       if (!solvedSpoken.current.has(i) && cellsOf(x).every((k, j) => f[k] === x.answer[j])) {
         solvedSpoken.current.add(i)
@@ -139,7 +139,7 @@ export function Crossword({ onClose }: { onClose: () => void }) {
       }
     })
     if (grid.words.every((x) => cellsOf(x).every((k, j) => f[k] === x.answer[j]))) { setTimeout(() => finish(f, revealed), 500); return }
-    // naprej: naslednja prazna celica v besedi, sicer naslednja nerešena beseda
+    // forward: next empty cell in the word, otherwise the next unsolved word
     const nextEmpty = wCells.findIndex((k, j) => j > pos && !f[k])
     if (nextEmpty >= 0) setPos(nextEmpty)
     else if (pos < wCells.length - 1) setPos(pos + 1)
@@ -186,7 +186,7 @@ export function Crossword({ onClose }: { onClose: () => void }) {
     setTimeout(() => finish(f, rev), 700)
   }
 
-  // prava tipkovnica (računalnik)
+  // real keyboard (computer)
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       if (done) return
@@ -224,7 +224,7 @@ export function Crossword({ onClose }: { onClose: () => void }) {
     <motion.div className="session xw" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }}>
       <div className="s-inner">
         <div className="s-top">
-          <button className="iconbtn" onClick={onClose} aria-label="Zapri"><X /></button>
+          <button className="iconbtn" onClick={onClose} aria-label="Close"><X /></button>
           <div className="track"><i style={{ width: `${(solvedN / grid.words.length) * 100}%` }} /></div>
           <div className="combo">{solvedN}/{grid.words.length}</div>
         </div>
@@ -233,18 +233,18 @@ export function Crossword({ onClose }: { onClose: () => void }) {
           <>
             {w && (
               <div className="xw-bar">
-                <button className="iconbtn" onClick={() => goWord(-1)} aria-label="Prejšnja beseda"><ChevronLeft /></button>
+                <button className="iconbtn" onClick={() => goWord(-1)} aria-label="Previous word"><ChevronLeft /></button>
                 <AnimatePresence mode="wait">
                   <motion.div key={wi} className="xw-clue" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.18 }}>
                     <ClueBody x={w} big />
-                    <span className="xw-meta"><b>{w.num} {w.dir === 'a' ? 'vodoravno' : 'navpično'}</b><span>{'pic' in w.clue ? 'Kaj je na sliki? ' : ''}({lens(w)})</span></span>
+                    <span className="xw-meta"><b>{w.num} {w.dir === 'a' ? 'across' : 'down'}</b><span>{'pic' in w.clue ? 'What is in the picture? ' : ''}({lens(w)})</span></span>
                   </motion.div>
                 </AnimatePresence>
-                <button className="iconbtn" onClick={() => goWord(1)} aria-label="Naslednja beseda"><ChevronRight /></button>
+                <button className="iconbtn" onClick={() => goWord(1)} aria-label="Next word"><ChevronRight /></button>
               </div>
             )}
 
-            <div className="xw-grid" style={{ gridTemplateColumns: `repeat(${grid.cols}, ${size}px)`, gridTemplateRows: `repeat(${grid.rows}, ${size}px)` }} role="grid" aria-label="Križanka">
+            <div className="xw-grid" style={{ gridTemplateColumns: `repeat(${grid.cols}, ${size}px)`, gridTemplateRows: `repeat(${grid.rows}, ${size}px)` }} role="grid" aria-label="Crossword">
               {Array.from({ length: grid.rows * grid.cols }, (_, i) => {
                 const r = Math.floor(i / grid.cols), c = i % grid.cols, k = key(r, c)
                 const info = cellMap.get(k)
@@ -252,7 +252,7 @@ export function Crossword({ onClose }: { onClose: () => void }) {
                 const solvedCell = (info.a != null && solved(info.a)) || (info.d != null && solved(info.d))
                 const cls = 'xw-c' + (inWord.has(k) ? ' on' : '') + (k === cur ? ' cur' : '') + (wrong.has(k) ? ' bad' : '') + (shown.has(k) ? ' shown' : '') + (solvedCell ? ' ok' : '')
                 return (
-                  <button key={k} className={cls} style={{ fontSize: size * 0.52 }} onClick={() => select(k)} aria-label={`Celica ${r + 1}, ${c + 1}`}>
+                  <button key={k} className={cls} style={{ fontSize: size * 0.52 }} onClick={() => select(k)} aria-label={`Cell ${r + 1}, ${c + 1}`}>
                     {info.num && <i>{info.num}</i>}
                     {fill[k] && <motion.span initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ duration: 0.16 }}>{fill[k]}</motion.span>}
                   </button>
@@ -261,7 +261,7 @@ export function Crossword({ onClose }: { onClose: () => void }) {
             </div>
 
             <div className="xw-lists">
-              {[['Vodoravno', across], ['Navpično', down] as const].map(([title, list]) => (
+              {[['Across', across], ['Down', down] as const].map(([title, list]) => (
                 <div key={title as string}>
                   <div className="xw-h">{title as string}</div>
                   {(list as { x: XWord; i: number }[]).map(({ x, i }) => (
@@ -275,15 +275,15 @@ export function Crossword({ onClose }: { onClose: () => void }) {
 
             <div className="xw-dock">
               <div className="xw-tools">
-                <button className="btn sm" onClick={hint}><Lightbulb />Črka</button>
-                <button className="btn sm" onClick={check}><CheckCheck />Preveri</button>
-                <button className="btn sm" onClick={giveUp}><Eye />Rešitev</button>
+                <button className="btn sm" onClick={hint}><Lightbulb />Letter</button>
+                <button className="btn sm" onClick={check}><CheckCheck />Check</button>
+                <button className="btn sm" onClick={giveUp}><Eye />Solution</button>
               </div>
-              <div className="kb" role="group" aria-label="Tipkovnica">
+              <div className="kb" role="group" aria-label="Keyboard">
                 {ROWS.map((row, ri) => (
                   <div className="kb-row" key={ri}>
                     {row.split('').map((ch) => <button key={ch} className="kb-k" onClick={() => typeLetter(ch)}>{ch}</button>)}
-                    {ri === 2 && <button className="kb-k wide" onClick={back} aria-label="Briši"><Delete /></button>}
+                    {ri === 2 && <button className="kb-k wide" onClick={back} aria-label="Delete"><Delete /></button>}
                   </div>
                 ))}
               </div>
@@ -291,23 +291,23 @@ export function Crossword({ onClose }: { onClose: () => void }) {
           </>
         ) : (
           <motion.div className="qcard glass" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, ease: 'easeOut' }}>
-            <div className="qmeta"><span className="k place">Križanka rešena</span><span>+{done.xp} XP</span></div>
-            <div className="big num">{done.res.filter((r) => r.ok).length}<small> / {done.res.length} besed</small></div>
+            <div className="qmeta"><span className="k place">Crossword solved</span><span>+{done.xp} XP</span></div>
+            <div className="big num">{done.res.filter((r) => r.ok).length}<small> / {done.res.length} words</small></div>
             <div className="list glass xw-sum">
               {done.res.map((r, i) => (
                 <div className="li" key={i}>
                   {'pic' in r.w.clue ? <PicImg id={r.w.clue.pic} size={44} className="xw-pic" /> : <span className="xw-sum-ico"><Grid3x3 /></span>}
                   <div className="li-main">
                     <span className="li-t" lang="en">{r.w.shown}{'pic' in r.w.clue ? <em> · {PIC_BY_ID[r.w.clue.pic].slo}</em> : null}</span>
-                    <span className="li-s">{r.ok ? (r.grade >= 3 ? 'brez pomoči' : 's pomočjo') : 'razkrito'}{'text' in r.w.clue ? ` · ${r.w.clue.text}` : ''}</span>
+                    <span className="li-s">{r.ok ? (r.grade >= 3 ? 'without help' : 'with help') : 'revealed'}{'text' in r.w.clue ? ` · ${r.w.clue.text}` : ''}</span>
                   </div>
                   <span className={'xw-mark ' + (r.ok ? 'ok' : 'bad')}>{r.ok ? <Check /> : <X />}</span>
                 </div>
               ))}
             </div>
             <div className="row" style={{ marginTop: 16 }}>
-              <button className="btn" onClick={onClose}>Končaj</button>
-              <button className="btn primary" onClick={() => setSeed((s) => s + 1)}><RotateCcw />Nova</button>
+              <button className="btn" onClick={onClose}>Finish</button>
+              <button className="btn primary" onClick={() => setSeed((s) => s + 1)}><RotateCcw />New</button>
             </div>
           </motion.div>
         )}

@@ -1,5 +1,5 @@
-// Stavki z vrzeljo za nepravilne glagole. Vrzel ___ zahteva navedeno obliko.
-// [glagol, oblika, stavek, slovenski namig]
+// Gap sentences for irregular verbs. The gap ___ requires the given form.
+// [verb, form, sentence, Slovenian hint]
 export type SForm = 'past' | 'pp'
 export type Sentence = [string, SForm, string, string]
 

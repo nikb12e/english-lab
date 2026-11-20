@@ -1,9 +1,9 @@
 import { forwardRef, type KeyboardEvent } from 'react'
 import { diff, norm } from '../lib/check'
 
-// Polje za odgovor: pravo, vidno vnosno polje (hitro in brez hroščev s kazalcem na telefonu).
-// Ob napaki se polje strese, tvoj odgovor se prečrta, pod njim se pokaže pravilna oblika
-// z označenimi črkami, ki si jih zgrešil. Ob pravilnem odgovoru polje poskoči in dobi kljukico.
+// Answer field: a real, visible input field (fast and free of cursor bugs on phones).
+// On a mistake the field shakes, your answer is crossed out, and the correct form is shown below it
+// with the letters you missed highlighted. On a correct answer the field bounces and gets a tick.
 
 export type KinStatus = 'idle' | 'ok' | 'bad'
 interface Props {

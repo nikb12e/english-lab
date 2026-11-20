@@ -24,14 +24,14 @@ export function addSentences(list: Sentence[]) {
   }
 }
 addSentences([...SENTENCES, ...SENTENCES_AI])
-// dodatni stavki, ki jih je jezikovni model ustvaril med uporabo
+// extra sentences the language model created during use
 try { addSentences(JSON.parse(localStorage.getItem('el:aiS') || '[]')) } catch { /* */ }
 
 const SEEN_KEY = 'el:sSeen'
 let sentSeen: Record<string, number> = {}
 try { sentSeen = JSON.parse(localStorage.getItem(SEEN_KEY) || '{}') } catch { sentSeen = {} }
 
-/** Izbere stavek, ki ga uporabnik najdlje ni videl; ko jih za glagol zmanjka, v ozadju naroči nove. */
+/** Picks the sentence the user has not seen for the longest time; when a verb runs out, new ones are requested in the background. */
 export function pickSentence(id: string): Sentence {
   const l = SENTENCES_BY_VERB[id]
   const sorted = l.slice().sort((a, b) => (sentSeen[sentKey(a)] || 0) - (sentSeen[sentKey(b)] || 0) || Math.random() - 0.5)
@@ -45,7 +45,7 @@ export function pickSentence(id: string): Sentence {
   return s
 }
 
-// poved za posamezno nalogo v seji je izbrana enkrat, zato jo lahko glas pripravi že nalogo prej
+// the sentence for each task in a session is chosen once, so the voice can prepare it one task ahead
 const chosen = new Map<number, Sentence>()
 export function sentFor(uid: number, id: string): Sentence {
   let s = chosen.get(uid)
@@ -60,25 +60,24 @@ async function topUp(id: string, form: Sentence[1]) {
   if (!v || asking.has(id + form)) return
   asking.add(id + form)
   try {
-    const { supabase } = await import('./supabase')
-    const { data: ses } = await supabase.auth.getSession()
-    if (!ses.session) return
+    const { aiOn, genSentences } = await import('./ai')
+    if (!aiOn()) return
     const exclude = (SENTENCES_BY_VERB[id] || []).filter((x) => x[1] === form).map((x) => x[2])
-    const { data } = await supabase.functions.invoke('ai', { body: { action: 'gen', verb: { inf: id, form, slo: v.slo, answers: [...v.accept[form]] }, exclude } })
-    const items: Sentence[] = (data?.items || []).map((x: { en: string; sl: string }) => [id, form, x.en, x.sl] as Sentence)
+    const got = await genSentences(id, form, v.slo, [...v.accept[form]], exclude)
+    const items: Sentence[] = got.map((x) => [id, form, x.en, x.sl] as Sentence)
     if (!items.length) return
     addSentences(items)
     const stored: Sentence[] = JSON.parse(localStorage.getItem('el:aiS') || '[]')
     localStorage.setItem('el:aiS', JSON.stringify([...stored, ...items].slice(-800)))
-  } catch { /* brez povezave: ostanejo obstoječi stavki */ }
+  } catch { /* offline: the existing sentences remain */ }
 }
 
 export type QItem =
   | { kind: 'verb'; key: string; verb: Verb; task: VerbTask; placement?: boolean }
   | { kind: 'card'; key: string; deck: Deck; card: Card }
 
-/** Samodejna težavnost (brez nastavitve): iz točnosti zadnjih 14 dni.
- *  Raziskave priklica priporočajo okoli 80 % uspeha; če gre bolje kot 88 %, novi glagoli pridejo z roba znanja. */
+/** Automatic difficulty (no setting needed): from the accuracy of the last 14 days.
+ *  Recall research recommends about 80 % success; if it goes better than 88 %, new verbs come from the edge of your knowledge. */
 export function effDiff(p: Profile = getState().profile): Difficulty {
   let n = 0, c = 0
   const now = new Date()
@@ -87,7 +86,7 @@ export function effDiff(p: Profile = getState().profile): Difficulty {
     const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
     n += p.days[k]?.n || 0; c += p.days[k]?.c || 0
   }
-  // samodejna raven: zelo zanesljiv učenec dobi najtežje naloge, zanesljiv težje, sicer normalne
+  // automatic level: a very reliable learner gets the hardest tasks, a reliable one harder ones, otherwise normal
   if (n >= 80 && c / n >= 0.95) return 'brutal'
   return n >= 30 && c / n >= 0.88 ? 'hard' : 'normal'
 }
@@ -117,10 +116,10 @@ export function verbItem(v: Verb, task: VerbTask, items: Record<string, MemState
   return { kind: 'verb', key, verb: v, task: t }
 }
 
-/** Samodejni tip naloge za glagol glede na spomin. */
+/** Automatic task type for a verb based on memory. */
 export function autoVerbItem(v: Verb, items: Record<string, MemState>, settings: Settings): QItem {
   const c = items['v:' + v.id]
-  // samo za preizkuse na lokalnem strežniku: vsili tip naloge
+  // only for tests on a local server: force a task type
   try { const f = location.hostname === 'localhost' && localStorage.getItem('el:forceTask'); if (f) return verbItem(v, f as VerbTask, items, settings) } catch { /* */ }
   const task: VerbTask =
     settings.verbMode === 'inf' && !c?.reps ? 'inf' : pickTask(c, effDiff(), !!SENTENCES_BY_VERB[v.id], canSpeak() && settings.speech && !!getState().session)
@@ -155,21 +154,21 @@ export function dueKeys(items: Record<string, MemState>, topics: TopicId[], now 
     .map(([k]) => k)
 }
 
-/** Utrjen glagol: vsaj dvakrat zapored pravilno (ali pravilno že ob prvem srečanju). */
+/** A mastered verb: correct at least twice in a row (or correct on the first encounter). */
 export const UTRJEN = 2
-/** Začeti, a še neutrjeni glagoli (vsaj enkrat vprašani, niz pravilnih < 2). */
+/** Started but not yet mastered verbs (asked at least once, run of correct answers < 2). */
 export const openVerbKeys = (items: Record<string, MemState>) =>
   VERBS.map((v) => 'v:' + v.id).filter((k) => items[k]?.reps && runOf(items[k]) < UTRJEN)
-/** Velikost skupine novih glagolov. */
+/** Size of a group of new verbs. */
 export const verbBatch = (s: Settings) => Math.max(1, Math.min(10, s.verbBatch || 5))
-/** Novi glagoli pridejo samo, ko so vsi začeti glagoli utrjeni; takrat pride ena skupina. */
+/** New verbs come only when all started verbs are mastered; then one group comes. */
 export const newVerbsLeft = (s: Settings, _p?: Profile, items?: Record<string, MemState>) =>
   items && openVerbKeys(items).length ? 0 : verbBatch(s)
 export const newCardsLeft = (s: Settings, _p?: Profile) => s.newCards
 
 export function unseenCards(items: Record<string, MemState>, topics: TopicId[]): QItem[] {
   const decks = GRAMMAR.filter((d) => topics.includes(d.id))
-  // naključni vrstni red: tipi nalog se mešajo, zato vsaka seja izgleda drugače
+  // random order: task types are mixed, so every session looks different
   const lists = decks.map((d) => shuffle(d.cards.filter((c) => c.kind !== 'write' && !items[`c:${d.id}/${c.id}`]?.reps)).map((c) => ({ kind: 'card' as const, key: `c:${d.id}/${c.id}`, deck: d, card: c })))
   const out: QItem[] = []
   for (let i = 0; lists.some((l) => l.length > i); i++) for (const l of lists) if (l[i]) out.push(l[i])
@@ -190,10 +189,10 @@ function interleave<T>(a: T[], b: T[]): T[] {
   return out
 }
 
-/** Pametni trening: zapadle ponovitve (najbolj pozabljene najprej), novi glagoli na meji tvojega znanja, nove slovnične kartice. */
+/** Smart training: due reviews (most forgotten first), new verbs at the edge of your knowledge, new grammar cards. */
 export function buildSmart(items: Record<string, MemState>, settings: Settings, profile: Profile, topics: TopicId[]): QItem[] {
   const dk = dueKeys(items, topics).slice(0, 70)
-  // neutrjeni glagoli pridejo v vajo, tudi če po urniku še niso na vrsti: najprej jih utrdiš
+  // unmastered verbs come into practice even if the schedule says they are not due yet: you master them first
   const open = topics.includes('verbs') ? openVerbKeys(items).filter((k) => !dk.includes(k)) : []
   const due = [...open, ...dk].map((k) => itemFromKey(k, items, settings)).filter(Boolean) as QItem[]
   const nv = topics.includes('verbs')
@@ -204,12 +203,12 @@ export function buildSmart(items: Record<string, MemState>, settings: Settings, 
   const fresh = interleave(shuffle(nv), nc)
   const rev = shuffle(due.slice(0, 10)).concat(due.slice(10))
   const base = interleave(rev, fresh)
-  // fokus na šibke točke: nekaj nalog iz kategorij, kjer največ grešiš, razporejenih skozi trening
+  // focus on weak points: a few tasks from the categories where you make the most mistakes, spread through the training
   const focus = focusFor(items, settings, profile, topics, new Set(base.map((q) => q.key)))
   return separateSameVerb(interleave(base, focus))
 }
 
-/** Ista beseda ne sme priti dvakrat zaporedoma. */
+/** The same word must not come twice in a row. */
 function separateSameVerb(q: QItem[]): QItem[] {
   for (let i = 1; i < q.length; i++) {
     if (q[i].kind === 'verb' && q[i - 1].kind === 'verb' && (q[i] as any).verb.id === (q[i - 1] as any).verb.id) {
@@ -224,7 +223,7 @@ export function buildPlacement(profile: Profile, items: Record<string, MemState>
   return placementVerbs(bOf(profile)).map((v) => ({ ...verbItem(v, 'forms', items, settings), placement: true }) as QItem)
 }
 
-/** Vaja enega tipa naloge za glagole. */
+/** Practice of one task type for verbs. */
 export function buildVerbDrill(task: VerbTask, items: Record<string, MemState>, settings: Settings, profile: Profile, n = 15): QItem[] {
   const now = Date.now()
   const seen = VERBS.filter((v) => items['v:' + v.id]?.reps)
@@ -240,7 +239,7 @@ export function buildVerbDrill(task: VerbTask, items: Record<string, MemState>, 
   } else {
     pool = seen.length >= 12 ? seen : pickNewVerbs(profile.theta, items, bOf(profile), n, effDiff(profile)).concat(seen)
   }
-  // šibki in pozabljajoči imajo prednost
+  // weak and forgotten ones take priority
   pool = pool
     .map((v) => ({ v, w: (1 - retrievability(items['v:' + v.id], now)) + (items['v:' + v.id]?.lapses || 0) * 0.3 + Math.random() * 0.5 }))
     .sort((a, b) => b.w - a.w)
@@ -259,23 +258,23 @@ export function buildDeckDrill(topic: TopicId, items: Record<string, MemState>, 
   return pick.slice(0, n).map((k) => itemFromKey(k, items, settings)!).filter(Boolean)
 }
 
-/** Vse skupaj: mešanica vsega, kar je zapadlo, in malo novega iz vsake teme. */
+/** Everything together: a mix of everything that is due and a little new from every topic. */
 export function buildEverything(items: Record<string, MemState>, settings: Settings, profile: Profile): QItem[] {
   return buildSmart(items, settings, profile, ['verbs', 'present', 'articles', 'nouns', 'vocab'])
 }
 
-// ───────── jezikovni model: sveže testne naloge ─────────
+// ───────── language model: fresh test tasks ─────────
 import { freshItems, type GenItem } from './ai'
 import { TEST_BANK } from '../data/testBank'
 
 const AI_KEY = 'el:aiC'
 const hashStr = (t: string) => { let h = 2166136261; for (let i = 0; i < t.length; i++) h = Math.imul(h ^ t.charCodeAt(i), 16777619); return (h >>> 0).toString(36) }
 const secTopic = (sec: string): TopicId | null => TEST_BANK[sec]?.topic || null
-/** sklopi brez sprotnega generiranja (slike so ročno narisane) */
+/** sections without live generation (the pictures are hand drawn) */
 export const NO_AI = new Set(['v_pic'])
 function toCard(sec: string, g: GenItem): Card | null {
   const id = `ai_${sec}_${hashStr(g.q)}`
-  // diff: težavnost 1-5, ki jo ob nastanku naloge oceni Jev
+  // diff: difficulty 1-5, rated when the task was created
   const diff = typeof g.diff === 'number' ? g.diff : undefined
   if (g.kind === 'choice' && g.options && typeof g.correct === 'number') return { id, kind: 'choice', q: g.q, options: g.options, correct: g.correct, note: g.note, sec, diff } as Card
   if (g.kind === 'type' && g.a?.length) return { id, kind: 'type', q: g.q, a: g.a, hint: g.hint, note: g.note, sec, diff } as Card
@@ -290,7 +289,7 @@ function addAiCards(list: { sec: string; card: Card }[]) {
 }
 try { addAiCards(JSON.parse(localStorage.getItem(AI_KEY) || '[]')) } catch { /* */ }
 
-/** Ko v kaki skupini zmanjka novih nalog, jezikovni model (GPT-6 Luna) ustvari nove, preverjene naloge. */
+/** When a group runs out of new tasks, the language model creates new, checked tasks (needs your own AI key). */
 export async function topUpTests(items: Record<string, MemState>, max = 3, only?: string[]) {
   const secs = (only || Object.keys(TEST_BANK)).filter((sec) => TEST_BANK[sec] && !NO_AI.has(sec)).map((sec) => {
     const t = secTopic(sec)!
@@ -315,7 +314,7 @@ export async function topUpTests(items: Record<string, MemState>, max = 3, only?
   return added
 }
 
-/** Preverjanje: naloge v vrstnem redu in obsegu Mock testa, z izbiro šibkih in še nevidenih nalog. */
+/** Check: tasks in the order and scope of the Mock test, picking weak and not yet seen tasks. */
 export const MOCK_PLAN: [string, number][] = [['v_cross', 4], ['v_explain', 3], ['p_brackets', 5], ['p_dialog', 2], ['v_opp', 3], ['v_word', 5], ['a_test', 6], ['verbs', 6], ['p_state', 2], ['v_idiom', 2], ['v_form', 2], ['v_write', 1]]
 export function buildMockTest(items: Record<string, MemState>, settings: Settings): QItem[] {
   const now = Date.now()
@@ -342,19 +341,19 @@ export function buildMockTest(items: Record<string, MemState>, settings: Setting
 }
 
 export const SEC_NAME: Record<string, [string, string]> = {
-  v_cross: ['Iz definicije', 'opis v eno besedo'], v_explain: ['Explain in English', 'oceni jezikovni model'], p_brackets: ['Present v oklepaju', 'simple ali continuous'],
-  p_state: ['Stanje ali dejanje', 'think, have, see, weigh'], p_spell: ['-s in -ing pravopis', 'hopping, lying, panicking'], v_opp: ['Nasprotja', 'dishonest, impatient'],
-  v_word: ['Ena beseda', 'pomen v oklepaju'], a_test: ['Členi s testa', 'the Thames, in prison'], v_form: ['Tvorjenje besed', 'ENJOY v enjoyable'],
-  v_conf: ['Zamenljive besede', 'trip, journey, travel'], v_prep: ['Predlogi', 'on foot, off the beaten track'], v_phr: ['Frazni glagoli', 'set off, hold up'],
-  v_idiom: ['Idiomi', 'cold feet, see eye to eye'], v_clothes: ['Oblačila', 'zadrga, karirast, semiš'], v_appear: ['Videz in osebnost', 'stubble, fussy'],
-  v_holiday: ['Počitnice', 'half board, stopover'],
-  p_dialog: ['Present v dialogu', 'kot telefonski pogovor na listu'], v_odd: ['Ne spada zraven', 'calm, rough, open … sea'],
-  v_noun: ['Ugani samostalnik', 'sandy, secluded … beach'], v_reply: ['Pravi odgovor', 'odgovori na izjave o potovanju'],
-  v_announce: ['Obvestila na poti', 'gate, platform, luggage'], v_explain_idiom: ['Pomen idiomov', 'dressed to kill, cold feet'],
-  v_write: ['Pisanje', 'opis osebe, počitnice; oceni učitelj AI'],
-  v_pic: ['Poimenuj sliko', '82 ilustracij z učnih listov'],
+  v_cross: ['From the definition', 'a description into one word'], v_explain: ['Explain in English', 'graded by the language model'], p_brackets: ['Present in brackets', 'simple or continuous'],
+  p_state: ['State or action', 'think, have, see, weigh'], p_spell: ['-s and -ing spelling', 'hopping, lying, panicking'], v_opp: ['Opposites', 'dishonest, impatient'],
+  v_word: ['One word', 'meaning in brackets'], a_test: ['Articles from the test', 'the Thames, in prison'], v_form: ['Word formation', 'ENJOY into enjoyable'],
+  v_conf: ['Easily confused words', 'trip, journey, travel'], v_prep: ['Prepositions', 'on foot, off the beaten track'], v_phr: ['Phrasal verbs', 'set off, hold up'],
+  v_idiom: ['Idioms', 'cold feet, see eye to eye'], v_clothes: ['Clothes', 'zip, checked, suede'], v_appear: ['Appearance and personality', 'stubble, fussy'],
+  v_holiday: ['Holidays', 'half board, stopover'],
+  p_dialog: ['Present in a dialogue', 'like the phone call on the sheet'], v_odd: ['Odd one out', 'calm, rough, open … sea'],
+  v_noun: ['Guess the noun', 'sandy, secluded … beach'], v_reply: ['The right reply', 'replies to statements about travel'],
+  v_announce: ['Announcements on the way', 'gate, platform, luggage'], v_explain_idiom: ['Meaning of idioms', 'dressed to kill, cold feet'],
+  v_write: ['Writing', 'describing a person, holidays; graded by the AI teacher'],
+  v_pic: ['Name the picture', '82 illustrations from the worksheets'],
 }
-/** Vaja ene vrste testnih nalog: najprej šibke in še nevidene. */
+/** Practice of one kind of test task: weak and not yet seen ones first. */
 export function buildSecDrill(sec: string, items: Record<string, MemState>, n = 12): QItem[] {
   const t: TopicId = sec === 'v_explain' || sec === 'v_write' ? 'vocab' : TEST_BANK[sec].topic
   const d = DECK_BY_ID[t]
@@ -365,7 +364,7 @@ export function buildSecDrill(sec: string, items: Record<string, MemState>, n = 
   }).sort((a, b) => b.w - a.w).slice(0, n).map(({ c }) => ({ kind: 'card' as const, key: `c:${t}/${c.id}`, deck: d, card: c }))
 }
 
-// ───────── ciljano: podobne naloge in fokus na šibke točke ─────────
+// ───────── targeted: similar tasks and focus on weak points ─────────
 import { weakest, isVerbCat, catsOf } from './weak'
 import { family } from './verbs'
 
@@ -375,7 +374,7 @@ function topicOfSec(sec: string): TopicId | null {
   if (sec.startsWith('d:')) return sec.slice(2) as TopicId
   return TEST_BANK[sec]?.topic || null
 }
-// težavnost kartice (Jev): delež nalog v banki, ki so lažje od te, preslikan na lestvico sposobnosti θ
+// card difficulty (Jev): the share of tasks in the bank that are easier than this one, mapped onto the ability scale θ
 const DIFF_SORTED = Object.values(BANK_DIFF).sort((a, b) => a - b)
 export function cardB(c: Card): number | null {
   const raw = BANK_DIFF[c.id] ?? (typeof (c as { diff?: number }).diff === 'number' ? ((c as { diff?: number }).diff! - 1) * 0.75 : null)
@@ -384,7 +383,7 @@ export function cardB(c: Card): number | null {
   while (lo < hi) { const m = (lo + hi) >> 1; if (DIFF_SORTED[m] < raw) lo = m + 1; else hi = m }
   return -1.3 + 2.6 * (lo / Math.max(1, DIFF_SORTED.length))
 }
-// ciljna verjetnost uspeha za nove kartice glede na tok seje: ko ne gre, lažje; ko gre odlično, težje
+// target probability of success for new cards according to the session flow: easier when it is not going well, harder when it is going great
 const CARD_TARGET = { '-1': 0.86, '0': 0.72, '1': 0.55 } as const
 
 function cardsOfCat(cat: string, items: Record<string, MemState>, exclude: Set<string>, n: number): QItem[] {
@@ -398,7 +397,7 @@ function cardsOfCat(cat: string, items: Record<string, MemState>, exclude: Set<s
     .filter((c) => (cat.startsWith('d:') ? !c.sec : c.sec === cat) && c.kind !== 'write' && !exclude.has(cardKey(t, c.id)))
     .map((c) => {
       const st = items[cardKey(t, c.id)]
-      // nove: najbližje ciljni verjetnosti uspeha (težavnost oceni Jev); znane: tiste, ki jih najbolj pozabljaš ali si jih zgrešil
+      // new: closest to the target probability of success (difficulty rated by Jev); known: the ones you forget most or got wrong
       const b = cardB(c)
       const fit = b == null ? 0.5 : 1 - Math.min(1, Math.abs(pSuccess(theta, b) - target) * 2.2)
       const w = !st?.reps ? 1.2 + fit * 0.9 + Math.random() * 0.3 : (1 - retrievability(st, now)) + (st.lapses || 0) * 0.5 + Math.random() * 0.4
@@ -428,7 +427,7 @@ export function itemsForCat(cat: string, items: Record<string, MemState>, settin
   return isVerbCat(cat) ? verbsOfCat(cat, items, settings, exclude, n) : cardsOfCat(cat, items, exclude, n)
 }
 
-/** Po napaki: podobna naloga iste vrste (druga kartica iste skupine ali glagol iste družine z isto nalogo). */
+/** After a mistake: a similar task of the same kind (another card of the same group or a verb of the same family with the same task). */
 export function similarTo(it: QItem, items: Record<string, MemState>, settings: Settings, exclude: Set<string>): QItem | null {
   if (it.kind === 'card') {
     if (it.card.kind === 'write') return null
@@ -444,7 +443,7 @@ export function similarTo(it: QItem, items: Record<string, MemState>, settings: 
   return verbItem(pick, task, items, settings)
 }
 
-/** Fokus: naloge iz najšibkejših kategorij (do treh), razdeljene glede na velikost napake. */
+/** Focus: tasks from the weakest categories (up to three), split according to the size of the mistake. */
 export function buildFocus(items: Record<string, MemState>, settings: Settings, profile: Profile, n = 12): QItem[] {
   const w = weakest(profile, 3)
   if (!w.length) return []
@@ -458,7 +457,7 @@ export function buildFocus(items: Record<string, MemState>, settings: Settings, 
   return shuffle(out).slice(0, n)
 }
 
-/** Za trening: koliko fokusnih nalog dodati (več, če so napake velike). */
+/** For training: how many focus tasks to add (more if the mistakes are big). */
 export function focusFor(items: Record<string, MemState>, settings: Settings, profile: Profile, topics: TopicId[], taken: Set<string>): QItem[] {
   const f = buildFocus(items, settings, profile, 6).filter((q) => !taken.has(q.key))
   return f.filter((q) => {
@@ -468,7 +467,7 @@ export function focusFor(items: Record<string, MemState>, settings: Settings, pr
   }).slice(0, 4)
 }
 
-/** Sproti: GPT-6 Luna ustvari nove naloge za izbrano vrsto (vedno nove, ne iz predpomnilnika) in jih vrne kot naloge za sejo. */
+/** Live: the language model creates new tasks for the chosen type (always new) and returns them as tasks for the session. */
 export async function liveItems(sec: string, n = 3): Promise<QItem[]> {
   const t = secTopic(sec)
   if (!t) return []
@@ -485,7 +484,7 @@ export async function liveItems(sec: string, n = 3): Promise<QItem[]> {
   return cards.slice(0, n).map((c) => ({ kind: 'card' as const, key: `c:${t}/${c.id}`, deck: d, card: c }))
 }
 
-/** Katere vrste nalog naj se v tej seji ustvarijo sproti: najprej šibke, sicer tiste, ki so že v seji. */
+/** Which task types should be generated live in this session: weak ones first, otherwise those already in the session. */
 export function liveSecsFor(queue: QItem[], profile: Profile): string[] {
   const weakSecs = weakest(profile, 5, 2).map((w) => w.c).filter((c) => TEST_BANK[c])
   const inQueue = [...new Set(queue.flatMap((q) => (q.kind === 'card' && q.card.sec && TEST_BANK[q.card.sec] ? [q.card.sec] : [])))]
@@ -494,13 +493,13 @@ export function liveSecsFor(queue: QItem[], profile: Profile): string[] {
   return pool.slice(0, 2)
 }
 
-// najtežje vrste s testa: odprti odgovori (vpis), dialogi, besedotvorje, idiomi
+// the hardest task types from the test: open answers (typing), dialogues, word formation, idioms
 const HARD_SECS = ['p_dialog', 'p_brackets', 'v_word', 'v_form', 'v_idiom', 'v_cross', 'v_prep', 'a_test']
-/** Izziv, ko ti gre odlično: težka naloga s testa (raje vpis kot izbira), ki je še nisi videl ali je zapadla. */
+/** A challenge when you are doing great: a hard task from the test (typing rather than choice) that you have not seen yet or that is due. */
 export function challengeItem(items: Record<string, MemState>, exclude: Set<string>): QItem | null {
   for (const sec of shuffle(HARD_SECS.filter((x) => TEST_BANK[x]))) {
     const got = cardsOfCat(sec, items, exclude, 10)
-    // izziv: najtežja (po oceni Jev) med kandidati, raje vpis kot izbira
+    // challenge: the hardest (as rated by Jev) among the candidates, typing rather than choice
     const hard = (q: QItem) => (q.kind === 'card' ? (cardB(q.card) ?? 0) + (q.card.kind === 'type' ? 0.4 : 0) : 0)
     const pick = got.sort((a, b) => hard(b) - hard(a))[0]
     if (pick) return pick

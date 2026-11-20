@@ -1,6 +1,6 @@
-// Open source različica: brez strežnika, brez računov in brez zunanjih API klicev.
-// Ta modul nadomešča odjemalca Supabase z lokalno izvedbo, ki ima enak vmesnik, zato preostala koda deluje
-// nespremenjeno. Napredek ostane v brskalniku (localStorage), AI funkcije se izklopijo, Arena igra z boti.
+// Open source version: no server, no accounts and no built in API calls (AI features use only the key you add yourself).
+// This module replaces the Supabase client with a local implementation that has the same interface, so the rest of the code works
+// unchanged. Progress stays in the browser (localStorage), the Arena plays with bots.
 
 export const SUPABASE_URL = ''
 export const SUPABASE_KEY = ''
@@ -13,7 +13,7 @@ export interface Session {
 type Payload = { payload: unknown }
 type Handler = (msg: Payload) => void
 
-/** Lokalni kanal: vidi samo tebe, sporočila drugih igralcev nikoli ne pridejo. */
+/** Local channel: sees only you, messages from other players never arrive. */
 export class RealtimeChannel {
   private presence: Record<string, unknown[]> = {}
   private syncHandlers: (() => void)[] = []
@@ -44,9 +44,9 @@ export class RealtimeChannel {
   }
 }
 
-const offlineError = { message: 'Open source različica deluje brez strežnika.', status: 0 }
+const offlineError = { message: 'The open source build works without a server.', status: 0 }
 
-/** Poizvedba na bazo: vedno vrne prazen rezultat brez napake, da se aplikacija ne ustavi. */
+/** Database query: always returns an empty result without an error so the app does not stop. */
 function query(): any {
   const result = { data: null, error: offlineError }
   const chain: any = new Proxy(function () {}, {

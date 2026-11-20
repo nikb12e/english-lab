@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 
-// Uvod ob prvem odprtju v seji: glagol se pred tabo pregiba go → went → gone, nato se razpre v aplikacijo.
+// Intro on first open in a session: a verb morphs in front of you go → went → gone, then opens into the app.
 const WORDS = ['go', 'went', 'gone']
 
 export function Intro({ onDone }: { onDone: () => void }) {

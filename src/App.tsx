@@ -12,6 +12,8 @@ import { Welcome } from './components/Welcome'
 import { Flame, Zap } from 'lucide-react'
 import { weekXp, defaultName } from './lib/league'
 import { topUpTests } from './lib/content'
+import { aiOn } from './lib/ai'
+import { onLlmChange } from './lib/llm'
 import { getState } from './lib/store'
 import { TabBar, Sheet, VerbDetail, Toast, type Tab } from './components/ui'
 import { Today, Practice, Verbs, Progress, type Nav } from './views/views'
@@ -19,13 +21,13 @@ import { VERB_BY_ID } from './lib/verbs'
 import { verbItem, type QItem } from './lib/content'
 import { setSoundEnabled } from './lib/sound'
 
-const TAB_HASH: Record<Tab, string> = { today: '', practice: 'vaje', verbs: 'glagoli', progress: 'napredek' }
+const TAB_HASH: Record<Tab, string> = { today: '', practice: 'practice', verbs: 'verbs', progress: 'progress' }
 const tabFromHash = (): Tab => {
   const h = location.hash.replace('#', '')
   return (Object.entries(TAB_HASH).find(([, v]) => v && v === h)?.[0] as Tab) || 'today'
 }
 
-/** Napredek iz stare claude.ai aplikacije pride v #import=… (base64url JSON). */
+/** Progress from the old claude.ai app arrives in #import=… (base64url JSON). */
 function readImport(): { items: Record<string, MemState>; profile?: any } | null {
   const m = location.hash.match(/import=([A-Za-z0-9_-]+)/)
   if (!m) return null
@@ -54,7 +56,7 @@ function BrandMark() {
 
 const introSeen = () => { try { return sessionStorage.getItem('el:intro') === '1' } catch { return false } }
 
-// open source različica: brez prijave, napredek ostane v tem brskalniku
+// open source version: no sign in, progress stays in this browser
 const devGuest = true
 
 export default function App() {
@@ -73,12 +75,14 @@ export default function App() {
   const sound = useStore((s) => s.settings.sound)
 
   useEffect(() => setSoundEnabled(sound), [sound])
-  // prijavljen: v ozadju naroči sveže testne naloge tam, kjer jih zmanjkuje (GPT-6 Luna, shranjeno na strežniku)
+  // with an AI key: fetch fresh test tasks in the background where they are running out (stored in this browser)
+  const [aiKeyOn, setAiKeyOn] = useState(aiOn())
+  useEffect(() => onLlmChange(() => setAiKeyOn(aiOn())), [])
   useEffect(() => {
-    if (!session) return
+    if (!aiKeyOn) return
     const t = setTimeout(() => { void topUpTests(getState().items, 2) }, 4000)
     return () => clearTimeout(t)
-  }, [session?.user.id])
+  }, [aiKeyOn])
 
   const toast = useCallback((m: string) => {
     setToastMsg(m)
@@ -86,7 +90,7 @@ export default function App() {
   }, [])
 
   const endIntro = useCallback(() => {
-    try { sessionStorage.setItem('el:intro', '1') } catch { /* zasebni način */ }
+    try { sessionStorage.setItem('el:intro', '1') } catch { /* private mode */ }
     setIntro(false)
   }, [])
 
@@ -96,9 +100,9 @@ export default function App() {
     void initStore().then(() => {
       if (imp && Object.keys(imp.items).length) {
         importItems(imp.items, imp.profile)
-        toast(`Prenesen napredek iz stare aplikacije: ${Object.keys(imp.items).length} glagolov.`)
+        toast(`Progress imported from the old app: ${Object.keys(imp.items).length} records.`)
       }
-      if (authErr) toast('Prijava ni uspela: ' + authErr.replace(/\+/g, ' '))
+      if (authErr) toast('Sign in failed: ' + authErr.replace(/\+/g, ' '))
       if (imp || authErr) history.replaceState(null, '', location.pathname)
     })
     const onHash = () => setTab(tabFromHash())
@@ -115,7 +119,7 @@ export default function App() {
   const closeProfile = useCallback(() => setAccount(false), [])
   const nav: Nav = {
     start: (items, title, grow) => {
-      if (!items.length) return toast('Trenutno ni ničesar za vajo.')
+      if (!items.length) return toast('Nothing to practise right now.')
       setVerb(null)
       setRun({ items, title, id: Date.now(), grow })
     },
@@ -144,13 +148,13 @@ export default function App() {
           <div className="topbar">
             <div className="brand"><BrandMark />English Lab</div>
             <div className="top-r">
-              <button className={'pill stat' + (profile.streak ? ' lit' : '')} onClick={() => setAccount(true)} aria-label={`${profile.streak || 0} dni zapored`}>
+              <button className={'pill stat' + (profile.streak ? ' lit' : '')} onClick={() => setAccount(true)} aria-label={`${profile.streak || 0} day streak`}>
                 <Flame />{profile.streak || 0}
               </button>
-              <button className="pill stat xp" onClick={() => setAccount(true)} aria-label={`${weekXp(profile)} XP ta teden`}>
+              <button className="pill stat xp" onClick={() => setAccount(true)} aria-label={`${weekXp(profile)} XP this week`}>
                 <Zap />{weekXp(profile)}
               </button>
-              <button className="avatar" onClick={() => setAccount(true)} aria-label="Račun in nastavitve">
+              <button className="avatar" onClick={() => setAccount(true)} aria-label="Account and settings">
                 {avatar ? <img src={avatar} alt="" referrerPolicy="no-referrer" /> : session ? (name[0] || '?').toUpperCase() : 'EL'}
               </button>
             </div>
@@ -165,7 +169,7 @@ export default function App() {
       )}
       {authReady && (session || devGuest) && <TabBar tab={tab} onTab={go} />}
 
-      <Sheet open={!!verb} onClose={() => setVerb(null)} label="Glagol">
+      <Sheet open={!!verb} onClose={() => setVerb(null)} label="Verb">
         {verb && <VerbDetail id={verb} onPractice={(id) => nav.start([verbItem(VERB_BY_ID[id], 'forms', items, settings)], id)} />}
       </Sheet>
 

@@ -11,7 +11,7 @@ export default defineConfig({
       manifest: {
         name: 'English Lab',
         short_name: 'English Lab',
-        description: 'Vaje za angleščino: nepravilni glagoli in slovnica s pametnim ponavljanjem.',
+        description: 'English practice: irregular verbs and grammar with smart spaced repetition.',
         lang: 'sl',
         start_url: '/',
         display: 'standalone',
@@ -33,7 +33,7 @@ export default defineConfig({
             options: { cacheName: 'el-fonts', expiration: { maxEntries: 20, maxAgeSeconds: 60 * 60 * 24 * 365 } },
           },
           {
-            // izgovorjava glagolov in stavkov: enkrat prenesi, potem igra brez povezave
+            // pronunciation of verbs and sentences: download once, then it plays offline
             urlPattern: ({ url }) => url.pathname.startsWith('/audio/') || url.pathname.includes('/storage/v1/object/public/tts/'),
             handler: 'CacheFirst',
             options: { cacheName: 'el-audio', expiration: { maxEntries: 600, maxAgeSeconds: 60 * 60 * 24 * 365 }, cacheableResponse: { statuses: [0, 200] } },
@@ -45,7 +45,7 @@ export default defineConfig({
   build: {
     target: 'es2022',
     chunkSizeWarningLimit: 900,
-    // podatki (stavki, testne naloge) in knjižnice v ločenih kosih: ob novi različici kode se ne prenašajo znova
+    // data (sentences, test tasks) and libraries in separate chunks: a new code release does not download them again
     rollupOptions: {
       output: {
         manualChunks(id) {

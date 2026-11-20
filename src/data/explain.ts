@@ -1,11 +1,11 @@
-// Naloga 2 z Mock testa: »Explain in English and stick to the topic of holidays or describing people.«
-// Prvih šest besed je s testa, ostale z učnih listov. Odgovor oceni jezikovni model; brez povezave se oceniš sam.
+// Task 2 from the Mock test: “Explain in English and stick to the topic of holidays or describing people.”
+// The first six words are from the test, the rest from the worksheets. The answer is graded by the language model; offline you grade yourself.
 import type { ExplainCard } from './types'
 
 const E = (id: string, q: string, a: string, note?: string): ExplainCard => ({ id: 'x_' + id, kind: 'explain', q, a, note, sec: 'v_explain' })
 
 export const EXPLAIN_CARDS: ExplainCard[] = [
-  E('snatch', 'snatch', 'to take something quickly and roughly, often to steal it, e.g. a thief snatched her bag at the station', 'Na testu: drži se teme počitnic ali opisovanja ljudi.'),
+  E('snatch', 'snatch', 'to take something quickly and roughly, often to steal it, e.g. a thief snatched her bag at the station', 'On the test: stick to the topic of holidays or describing people.'),
   E('screening', 'screening', 'a security check at the airport where passengers and their bags are examined before boarding'),
   E('belongings', 'belongings', 'the things that you own and take with you, e.g. your luggage and personal items on a trip'),
   E('seeoff', 'see somebody off', 'to go to the station or airport with someone to say goodbye when they leave on a journey'),
@@ -45,7 +45,7 @@ export const EXPLAIN_CARDS: ExplainCard[] = [
   E('tiptongue', 'on the tip of my tongue', 'you almost remember a word or name but cannot quite say it'),
 ]
 
-// dodatni izrazi z učnih listov, razlage pripravil GPT-6 Luna
+// extra expressions from the worksheets, explanations prepared by a language model
 export const EXPLAIN_AI: ExplainCard[] = [
   E("aiovalface0", "oval face", "An oval face is longer than it is wide, like an oval face in a family photo."),
   E("aifreckles1", "freckles", "Freckles are small brown spots on the skin, like the spots on her nose."),

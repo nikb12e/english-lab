@@ -9,7 +9,7 @@ export type VerbMode = 'forms' | 'inf' | 'mix'
 export interface Settings {
   verbMode: VerbMode
   newVerbs: number
-  /** koliko novih glagolov pride naenkrat; naslednja skupina šele, ko so vsi začeti glagoli utrjeni */
+  /** how many new verbs come at once; the next group only when all started verbs are mastered */
   verbBatch: number
   newCards: number
   retention: number
@@ -17,7 +17,7 @@ export interface Settings {
   sound: boolean
   speech: boolean
   topics: TopicId[]
-  /** sodelovanje na tedenski lestvici */
+  /** taking part in the weekly leaderboard */
   league: boolean
 }
 
@@ -35,15 +35,15 @@ export interface Profile {
   correct: number
   time: number
   sprintBest: number
-  /** največ rešenih besed v križanki */
+  /** most words solved in a crossword */
   xwBest?: number
   theta: number
   thetaN: number
   placed: boolean
   bAdj: Record<string, number>
-  /** prikazno ime na lestvici */
+  /** display name on the leaderboard */
   name?: string
-  /** ocena napak po vrstah nalog (glej lib/weak.ts) */
+  /** mistake estimate by task type (see lib/weak.ts) */
   weak?: Record<string, { e: number; n: number; t: number }>
 }
 
@@ -59,10 +59,10 @@ export const DEFAULT_SETTINGS: Settings = {
   speech: true,
   topics: ['verbs', 'present', 'articles', 'nouns', 'vocab'],
 }
-/** Učne nastavitve niso več izbirne: vrednosti, ki jih priporočajo FSRS in raziskave priklica. Težavnost se prilagaja sama. */
+/** Learning settings are no longer optional: values recommended by FSRS and recall research. Difficulty adjusts itself. */
 const AUTO: Partial<Settings> = { retention: 0.9, verbBatch: 5, newCards: 6, difficulty: 'normal' }
 
-/** Kdor je imel izbrane vse stare teme, dobi samodejno še novo temo besedišča. */
+/** Anyone who had all the old topics selected automatically gets the new vocabulary topic too. */
 const fixS = (s: Settings): Settings => (s.topics.length === 4 && !s.topics.includes('vocab') ? { ...s, topics: [...s.topics, 'vocab'] } : s)
 
 export const DEFAULT_PROFILE: Profile = {
@@ -135,7 +135,7 @@ function saveLocal() {
       const { items, settings, profile, settingsU, profileU } = state
       localStorage.setItem(lsKey(uidNow()), JSON.stringify({ items, settings, profile, settingsU, profileU }))
     } catch {
-      /* poln ali nedostopen localStorage: podatki ostanejo v spominu in oblaku */
+      /* full or unavailable localStorage: the data stays in memory and in the cloud */
     }
   }, 150)
 }
@@ -150,7 +150,7 @@ function applyLocal(uid: string) {
   })
 }
 
-// ───────────── mutacije ─────────────
+// ───────────── mutations ─────────────
 const dirty = new Set<string>()
 export function putItem(key: string, s: MemState) {
   set({ items: { ...state.items, [key]: s } })
@@ -183,7 +183,7 @@ export async function resetAll() {
     schedulePush()
   }
 }
-/** Uvoz napredka (npr. iz stare claude.ai aplikacije). Združi po času spremembe. */
+/** Progress import (e.g. from the old claude.ai app). Merges by time of change. */
 export function importItems(items: Record<string, MemState>, profile?: Partial<Profile>) {
   const merged = { ...state.items }
   for (const [k, v] of Object.entries(items)) {
@@ -215,7 +215,7 @@ export function importItems(items: Record<string, MemState>, profile?: Partial<P
   schedulePush()
 }
 
-// ───────────── sinhronizacija s Supabase ─────────────
+// ───────────── sync with Supabase ─────────────
 let pushTimer = 0
 let pushing = false
 function schedulePush() {
@@ -308,7 +308,7 @@ async function onSession(session: Session | null) {
   const uid = session.user.id
   const hadLocal = !!loadLocal(uid)
   applyLocal(uid)
-  // prvi vpis na tej napravi: prenesi napredek gosta v račun
+  // first sign in on this device: move the guest progress into the account
   if (!hadLocal) {
     const guest = loadLocal(GUEST)
     if (guest && Object.keys(guest.items || {}).length) {

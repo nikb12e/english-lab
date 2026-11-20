@@ -1,9 +1,9 @@
-// Izgovorjava, zgrajena za zanesljivost (kot Duolingo):
-// 1) Vsak posnetek ima stalen naslov (SHA-256 besedila), zato ga aplikacija najprej prenese NEPOSREDNO iz shrambe (0,2 s).
-//    Strežnik (ElevenLabs v4 Turbo) pokliče samo, če posnetka še ni.
-// 2) Posnetki se prenesejo v pomnilnik vnaprej (naslednje naloge), predvaja se iz pomnilnika, zato zvok začne takoj.
-// 3) Vse gre skozi en sam, enkrat odklenjen predvajalnik (pogoj za iOS). Če iOS predvajanje zavrne, ga ob naslednjem dotiku ponovi.
-// 4) Novejše branje vedno prekine starejše; robotski glas brskalnika samo, če strežnik res ne deluje (po oddaji).
+// Pronunciation, built for reliability (like Duolingo):
+// 1) Every recording has a permanent address (SHA-256 of the text), so the app first downloads it DIRECTLY from storage (0.2 s).
+//    The server (ElevenLabs v4 Turbo, hosted version only) is called only if there is no recording yet.
+// 2) Recordings are downloaded into memory in advance (next tasks) and played from memory, so the sound starts instantly.
+// 3) Everything goes through a single player unlocked once (required on iOS). If iOS refuses playback, it retries on the next touch.
+// 4) Newer reading always interrupts older reading; the browser's robotic voice only if the server really is not working (after submitting).
 import { supabase, SUPABASE_URL } from './supabase'
 
 const MAX = 400
@@ -26,10 +26,10 @@ function synth(text: string, lang = 'en-GB') {
     const v = voices.find((x) => x.lang === lang) || voices.find((x) => x.lang.startsWith(lang.slice(0, 2)))
     if (v) u.voice = v
     window.speechSynthesis.speak(u)
-  } catch { /* brez zvoka */ }
+  } catch { /* no sound */ }
 }
 
-/* ───────── en predvajalnik, odklenjen ob prvem dotiku ───────── */
+/* ───────── one player, unlocked on the first touch ───────── */
 const SILENT = 'data:audio/mpeg;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjYwLjE2LjEwMAAAAAAAAAAAAAAA//OEwAAAAAAAAAAAAEluZm8AAAAPAAAABwAAA2AAVVVVVVVVVVVVVVVVVVVxcXFxcXFxcXFxcXFxcY6Ojo6Ojo6Ojo6Ojo6Oqqqqqqqqqqqqqqqqqqqqx8fHx8fHx8fHx8fHx8fj4+Pj4+Pj4+Pj4+Pj4///////////////////AAAAAExhdmM2MC4zMQAAAAAAAAAAAAAAACQEIAAAAAAAAANgmVBi7QAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA//NExAAAAANIAAAAAExBTUUzLjEwMFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVTEFNRTMu//NExFMAAANIAAAAADEwMFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVTEFNRTMu//NExKYAAANIAAAAADEwMFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVTEFNRTMu//NExKwAAANIAAAAADEwMFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVTEFNRTMu//NExKwAAANIAAAAADEwMFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV//NExKwAAANIAAAAAFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV//NExKwAAANIAAAAAFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV'
 let main: HTMLAudioElement | null = null
 let unlocked = false
@@ -90,8 +90,8 @@ async function play(src: string, rate: number, my: number): Promise<boolean> {
   return false
 }
 
-/* ───────── posnetki v pomnilniku ───────── */
-const mem = new Map<string, string>() // ključ -> blob: URL
+/* ───────── recordings in memory ───────── */
+const mem = new Map<string, string>() // key -> blob: URL
 const loading = new Map<string, Promise<string | null>>()
 function keep(k: string, obj: string) {
   mem.set(k, obj)
@@ -117,7 +117,7 @@ async function sha(s: string) {
   return [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, '0')).join('')
 }
 
-// strežniški klici: največ 2 hkrati, nujni (trenutna naloga) gredo pred vnaprejšnje
+// server calls: at most 2 at once, urgent ones (current task) go before prefetching
 let active = 0
 const waiting: { urgent: boolean; go: () => void }[] = []
 function slot(urgent: boolean): Promise<() => void> {
@@ -140,7 +140,7 @@ async function generate(t: string, urgent: boolean): Promise<string | null> {
         const { data, error } = await supabase.functions.invoke('ai', { body: { action: 'tts', text: t } })
         if (!error && data?.url) return data.url as string
         if ((error as { context?: { status?: number } } | null)?.context?.status === 429) break
-      } catch { /* poskusi znova */ }
+      } catch { /* try again */ }
       await new Promise((r) => setTimeout(r, 400))
     }
     aiDown = Date.now() + 60_000
@@ -148,7 +148,7 @@ async function generate(t: string, urgent: boolean): Promise<string | null> {
   } finally { release() }
 }
 
-/** Pripravi posnetek besedila v pomnilnik: najprej iz shrambe, sicer ga ustvari strežnik. */
+/** Loads a recording of the text into memory: from storage first, otherwise the server creates it. */
 export function prepare(text: string, urgent = false): Promise<string | null> {
   const t = norm(text)
   if (!t) return Promise.resolve(null)
@@ -174,9 +174,9 @@ export function prepare(text: string, urgent = false): Promise<string | null> {
   return p
 }
 
-/* ───────── glagoli (posnetki v aplikaciji) ───────── */
-// Posnetke glagolov (public/audio/v2/<glagol>.mp3) repozitorij ne vsebuje. Ko jih dodaš, nastavi na true.
-// Brez njih aplikacija uporabi glas brskalnika.
+/* ───────── verbs (recordings in the app) ───────── */
+// The repository does not include the verb recordings (public/audio/v2/<verb>.mp3). When you add them, set this to true.
+// Without them the app uses the browser's voice.
 const HAS_VERB_AUDIO = false
 const verbUrl = (id: string) => `/audio/v2/${encodeURIComponent(id)}.mp3`
 function prepVerb(id: string): Promise<string | null> {
@@ -200,10 +200,10 @@ export async function speakVerb(id: string, fallback: string) {
   if (!obj || !(await play(obj, 1, my))) { if (my === seq) synth(fallback) }
 }
 
-/* ───────── branje ───────── */
+/* ───────── reading ───────── */
 let seq = 0
-/** Prebere pravilno različico po oddaji. Počaka na ElevenLabs glas (do 15 s), dokler si na tej nalogi.
- *  Robotski glas samo, če strežnik res ne deluje. */
+/** Reads the correct version after submitting. Waits for the recorded voice (up to 15 s) while you are on this task.
+ *  Robotic voice only if the server really is not working. */
 export async function speak(text: string, rate = 1.06) {
   const t = norm(text)
   if (!t) return
@@ -215,7 +215,7 @@ export async function speak(text: string, rate = 1.06) {
   if (my === seq) synth(t)
 }
 
-/** Prebere navodilo naloge, še preden odgovoriš (vrzel je kratek premor). Brez robotskega glasu. */
+/** Reads the task instruction before you answer (the gap is a short pause). No robotic voice. */
 export async function speakTask(text: string) {
   const t = norm(text)
   if (!t) return
@@ -226,8 +226,8 @@ export async function speakTask(text: string) {
   await play(obj, 1.04, my)
 }
 
-/** Iz naloge z vrzeljo naredi besedilo za branje pred odgovorom: na mestu vrzeli reče »blank« in namig, kaj vstaviti
- *  (glagol v oklepaju ali infinitiv), da slišiš celo nalogo, ne samo premora. Slovenska navodila se ne berejo. */
+/** Turns a gap task into text to read before answering: in place of the gap it says “blank” and a hint of what to fill in
+ *  (the verb in brackets or the infinitive), so you hear the whole task, not just a pause. Slovenian instructions are not read. */
 export function gapText(q: string, hint?: string): string | null {
   if (!q || /[čšžČŠŽ]|^(Napiši|Write the|What is the opposite)/.test(q)) return null
   let t = q.replace(/\b[AB]:\s*/g, '')
@@ -238,7 +238,7 @@ export function gapText(q: string, hint?: string): string | null {
   return t.slice(0, MAX)
 }
 
-/** Iz naloge z vrzeljo naredi celo angleško poved s pravilnim odgovorom; slovenska navodila se ne berejo. */
+/** Turns a gap task into a whole English sentence with the correct answer; Slovenian instructions are not read. */
 export function fullSentence(q: string, ans: string): string | null {
   if (/[čšžČŠŽ]|^(Napiši|Write the|What is the opposite)/.test(q)) return null
   let t = q.includes('___') ? q.replace('___', ans.replace(/^– \(no article\)$/, '').trim()) : (ans ? null : q)
@@ -249,7 +249,7 @@ export function fullSentence(q: string, ans: string): string | null {
   return t.slice(0, MAX)
 }
 
-/** Kaj se prebere po oddaji: vedno pravilna različica. Najprej cela poved, sicer vsaj pravilna beseda. */
+/** What is read after submitting: always the correct version. The whole sentence first, otherwise at least the correct word. */
 export function correctSpoken(q: string, answer: string): string | null {
   const a = answer.trim()
   if (a.length > 28) return fullSentence(a, '') || a.slice(0, MAX)
@@ -259,10 +259,10 @@ export function correctSpoken(q: string, answer: string): string | null {
   return a
 }
 
-/** Takoj prekine branje (npr. ob zaprtju vaje). */
+/** Stops reading immediately (e.g. when closing a practice). */
 export function hush() { ++seq; retryOnTap = null; stop() }
 
-/** Ob prehodu na novo nalogo: zvok mehko utihne (0,2 s), nato se ustavi. */
+/** When moving to a new task: the sound fades out gently (0.2 s), then stops. */
 export function fadeOut(ms = 200) {
   const mine = ++seq
   retryOnTap = null
@@ -271,9 +271,9 @@ export function fadeOut(ms = 200) {
   if (a.paused) return
   const start = performance.now()
   const tick = () => {
-    if (mine !== seq) return // že predvaja novo branje: ne utišaj ga
+    if (mine !== seq) return // a new reading is already playing: do not mute it
     const k = Math.min(1, (performance.now() - start) / ms)
-    try { a.volume = Math.max(0, 1 - k) } catch { /* iOS ne dovoli spreminjati glasnosti */ }
+    try { a.volume = Math.max(0, 1 - k) } catch { /* iOS does not allow changing the volume */ }
     if (k < 1 && !a.paused) requestAnimationFrame(tick)
     else { try { a.pause(); a.volume = 1 } catch { /* */ } }
   }

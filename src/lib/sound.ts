@@ -1,4 +1,4 @@
-// Kratki sintetizirani zvoki (Web Audio), brez datotek. Sprožijo se v istem okvirju kot animacija.
+// Short synthesised sounds (Web Audio), no files. They fire in the same frame as the animation.
 let ctx: AudioContext | null = null
 function ac() {
   if (!ctx) {

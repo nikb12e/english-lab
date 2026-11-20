@@ -2,14 +2,14 @@ import { useState } from 'react'
 import { VERBS } from '../lib/verbs'
 import { maturity, type MemState } from '../lib/fsrs'
 
-// List glagolov kot mreža: 178 kvadratkov v istem vrstnem redu kot na listu Gozdnega sklada.
-// Barva = kako dobro glagol znaš (od svetlo sive do modrega kulija), rdeč rob = na vrsti za ponovitev.
+// The verb sheet as a grid: 178 squares in the same order as on the printed verb list.
+// Colour = how well you know the verb (from light grey to ballpoint blue), red outline = due for review.
 export function Grid178({ items, onSelect }: { items: Record<string, MemState>; onSelect: (id: string) => void }) {
   const [hover, setHover] = useState<string | null>(null)
   const now = Date.now()
   return (
     <div className="grid178-wrap">
-      <div className="grid178" role="list" aria-label={`Vseh ${VERBS.length} glagolov`}>
+      <div className="grid178" role="list" aria-label={`All ${VERBS.length} verbs`}>
         {VERBS.map((v, i) => {
           const c = items['v:' + v.id]
           const m = maturity(c)

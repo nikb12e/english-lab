@@ -1,5 +1,5 @@
-// 178 nepravilnih glagolov z lista Gozdnega sklada in 18 dodatnih z učiteljičinega lista za test z lista "Angleški nepravilni glagoli" (Gozdni sklad)
-// [infinitive, past, participle, slovensko, tier(1 pogost,2 srednji,3 redek), extraPast?, extraPP?, note?]
+// 178 irregular verbs from the printed verb list and 18 extra ones from the teacher's test list
+// [infinitive, past, participle, Slovenian, tier(1 common,2 medium,3 rare), extraPast?, extraPP?, note?]
 export type RawVerb = [string, string, string, string, number, string?, string?, string?];
 export const RAW_VERBS: RawVerb[] = [
 ["abide","abode","abode","bivati",3,"abided","abided"],
@@ -200,5 +200,5 @@ export const RAW_VERBS: RawVerb[] = [
 ["withstand","withstood","withstood","vzdržati, prenesti",3],
 ];
 
-/** Glagoli z lista »Irregular verbs for the test« (Drive, Angleščina). */
+/** Verbs from the “Irregular verbs for the test” list. */
 export const TEST_VERBS = new Set('abide arise awake be bear beat become begin bend bet bid bind bite bleed blow break breed bring broadcast build burn burst buy cast catch choose cling come cost creep cut deal dig do draw drink drive dwell eat fall feed feel fight find fit flee fling fly forbid forecast foresee foretell forget forgive forsake freeze get give go grind grow hang have hear hide hit hold hurt interweave keep kneel know lay lead lean leap learn leave lend let lie light lose make mean meet mistake pay prove put quit read ride ring rise run saw say see seek sell send set shake shear shed shine shoot show shrink shut sing sink sit slay sleep slide sling slit smell speak speed spend spit split spoil spread spring stand steal stick sting stink stride strike strive swear sweep swim swing take teach tear tell think throw tread understand undertake undo upset wake wear weave weep wet win wind withdraw withhold withstand wring'.split(' '))

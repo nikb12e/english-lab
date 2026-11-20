@@ -3,15 +3,15 @@ import { RAW_VERBS } from '../data/verbs'
 export type Form = 'inf' | 'past' | 'pp'
 export const FORMS: Form[] = ['inf', 'past', 'pp']
 export const FORM_LABEL: Record<Form, string> = { inf: 'Infinitive', past: 'Past simple', pp: 'Past participle' }
-export const FORM_SL: Record<Form, string> = { inf: 'nedoločnik', past: 'preteklik', pp: 'pretekli deležnik' }
+export const FORM_SL: Record<Form, string> = { inf: 'infinitive', past: 'past simple', pp: 'past participle' }
 
 export type VerbType = 'AAA' | 'AAB' | 'ABA' | 'ABB' | 'ABC'
 export const TYPE_TXT: Record<VerbType, string> = {
-  AAA: 'vse tri oblike enake',
-  AAB: 'nedoločnik = preteklik',
-  ABA: 'nedoločnik = deležnik',
-  ABB: 'preteklik = deležnik',
-  ABC: 'vse tri različne',
+  AAA: 'all three forms the same',
+  AAB: 'infinitive = past',
+  ABA: 'infinitive = participle',
+  ABB: 'past = participle',
+  ABC: 'all three different',
 }
 
 export interface Verb {
@@ -32,7 +32,7 @@ export interface Verb {
 
 const split = (s?: string) => (s || '').split('/').map((x) => x.trim()).filter(Boolean)
 
-// -s in -ing oblike (stolpca »Sedanjik« in »Glagolnik« na listu). Izjeme, ki jih pravila ne pokrijejo:
+// -s and -ing forms (the “Present” and “Gerund” columns on the sheet). Exceptions the rules do not cover:
 const ING_OVERRIDE: Record<string, string> = {
   quit: 'quitting', bid: 'bidding', fit: 'fitting', wet: 'wetting', foresee: 'foreseeing', undo: 'undoing', forecast: 'forecasting', broadcast: 'broadcasting', saw: 'sawing', withstand: 'withstanding', undertake: 'undertaking',
   be: 'being', see: 'seeing', flee: 'fleeing', shoe: 'shoeing', lie: 'lying', die: 'dying',
@@ -50,12 +50,12 @@ function ingForm(v: string): string {
   if (v.endsWith('ee') || v.endsWith('oe') || v.endsWith('ye')) return v + 'ing'
   if (v.endsWith('e')) return v.slice(0, -1) + 'ing'
   const n = v.length
-  // enozložni CVC (en samoglasnik pred končnim soglasnikom): podvoji
+  // one syllable CVC (one vowel before the final consonant): double
   const vowelsCount = (v.match(/[aeiou]+/g) || []).length
   if (n >= 3 && vowelsCount === 1 && !vowel(v[n - 1]) && vowel(v[n - 2]) && !vowel(v[n - 3]) && !'wxy'.includes(v[n - 1])) {
     return v + v[n - 1] + 'ing'
   }
-  // qu + samoglasnik (quit) ali spl + it
+  // qu + vowel (quit) or spl + it
   return v + 'ing'
 }
 function thirdForm(v: string): string {

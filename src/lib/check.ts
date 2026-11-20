@@ -1,4 +1,4 @@
-/** Poenoti zapis za primerjavo: male črke, enotni minusi, presledki, potence, brez končnih ločil. */
+/** Normalises text for comparison: lower case, uniform minus signs, spaces, powers, no trailing punctuation. */
 export function norm(s: string): string {
   return s
     .toLowerCase()
@@ -16,7 +16,7 @@ export function norm(s: string): string {
     .trim()
 }
 
-/** Glagolske oblike: dovoli »was/were«, »was or were«, »was, were«. Vsak del mora biti sprejet. */
+/** Verb forms: allows “was/were”, “was or were”, “was, were”. Every part must be accepted. */
 export function checkForm(input: string, accepted: Set<string>): { ok: boolean; empty: boolean; parts: string[] } {
   const parts = norm(input)
     .split(/\s*(?:\/|,|\bor\b|\bali\b)\s*/)
@@ -45,7 +45,7 @@ export function lev(a: string, b: string): number {
   return p[n]
 }
 
-/** Razdeli pravilno obliko na koščke; `miss: true` so črke, ki jih v tvojem odgovoru ni. */
+/** Splits the correct form into pieces; `miss: true` are letters missing from your answer. */
 export function diff(user: string, correct: string): { t: string; miss: boolean }[] {
   const a = user, b = correct, m = a.length, n = b.length
   const L = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0))

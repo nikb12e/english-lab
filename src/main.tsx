@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client'
 import './styles.css'
 import App from './App.tsx'
 
-// Ko se po novi objavi aktivira nov service worker, stran se enkrat osveži, da ni več starega videza.
+// When a new service worker activates after a new release, the page reloads once so the old look is gone.
 if ('serviceWorker' in navigator) {
   const hadController = !!navigator.serviceWorker.controller
   let reloaded = false

@@ -1,27 +1,27 @@
-// Slikovni slovar: vsaka beseda je z učnih listov na Drivu (mapa Angleščina):
-//  Clothes.pdf, Appearance.pdf, Places to visit.pdf, Vocabulary building: travel, holidays (oba lista) in Mock test 1.
-//  Ilustracije so ročno narisane v SVG, v barvah aplikacije, z enotno debelino črte.
+// Picture dictionary: every word comes from the English worksheets:
+//  Clothes.pdf, Appearance.pdf, Places to visit.pdf, Vocabulary building: travel, holidays (both sheets) and Mock test 1.
+//  The illustrations are hand drawn in SVG, in the app's colours, with a consistent stroke width.
 
 export type PicCat = 'clothes' | 'body' | 'gear' | 'travel'
 export interface Pic {
   id: string
-  /** sprejeti odgovori; prvi je glavni */
+  /** accepted answers; the first is the main one */
   en: string[]
   slo: string
   cat: PicCat
-  /** vir na Drivu */
+  /** source worksheet */
   src: string
   svg: string
 }
 
 export const PIC_CAT: Record<PicCat, { name: string; bg: string }> = {
-  clothes: { name: 'Oblačila', bg: '#f1eeff' },
-  body: { name: 'Videz in telo', bg: '#fff1ea' },
-  gear: { name: 'Oprema za počitnice', bg: '#e6f8f0' },
-  travel: { name: 'Potovanja', bg: '#e8f3ff' },
+  clothes: { name: 'Clothes', bg: '#f1eeff' },
+  body: { name: 'Appearance and body', bg: '#fff1ea' },
+  gear: { name: 'Holiday gear', bg: '#e6f8f0' },
+  travel: { name: 'Travel', bg: '#e8f3ff' },
 }
 
-// paleta
+// palette
 const I = '#1f2140', V = '#6a4dff', V2 = '#a796ff', V3 = '#ddd5ff', M = '#19c28a', M2 = '#9be8c8', C = '#ff5d5d', C2 = '#ffb5ad'
 const A = '#ffb020', A2 = '#ffd98a', S = '#4ea8ff', S2 = '#bfe0ff', SK = '#ffd6b8', SK2 = '#f2b48e', BR = '#7a4a2b', BR2 = '#b9824f'
 const G = '#c3c8db', G2 = '#e4e7f1', W = '#ffffff', D = '#3f6fd1', GI = '#ea7a32', DK = '#3a3e63', SAND = '#f6dd9e'
@@ -29,7 +29,7 @@ const G = '#c3c8db', G2 = '#e4e7f1', W = '#ffffff', D = '#3f6fd1', GI = '#ea7a32
 const SRC = {
   clothes: 'Clothes.pdf',
   appear: 'Appearance.pdf',
-  equip: 'Places to visit.pdf, naloga 4 (Equipment)',
+  equip: 'Places to visit.pdf, task 4 (Equipment)',
   travel1: 'Travel, holidays (list 1)',
   travel2: 'Travel, holidays (list 2)',
   mock: 'Mock test 1',
@@ -48,7 +48,7 @@ const arrow = (x1: number, y1: number, x2: number, y2: number) => {
   const p1 = [x2 - h * Math.cos(a - 0.5), y2 - h * Math.sin(a - 0.5)], p2 = [x2 - h * Math.cos(a + 0.5), y2 - h * Math.sin(a + 0.5)]
   return `<g stroke="${V}" stroke-width="3.5"><path d="M${x1} ${y1} L${x2} ${y2}" fill="none"/><path d="M${p1[0].toFixed(1)} ${p1[1].toFixed(1)} L${x2} ${y2} L${p2[0].toFixed(1)} ${p2[1].toFixed(1)}" fill="none"/></g>`
 }
-/** drobne pike (strnišče, pege); deterministično */
+/** tiny dots (stubble, freckles); deterministic */
 function dots(cx: number, cy: number, rx: number, ry: number, n: number, fill: string, r = 1.3, seed = 7) {
   let s = seed, out = ''
   const rnd = () => ((s = (s * 9301 + 49297) % 233280) / 233280)
@@ -59,7 +59,7 @@ function dots(cx: number, cy: number, rx: number, ry: number, n: number, fill: s
   return out
 }
 
-/* ───────── pomožne figure ───────── */
+/* ───────── helper figures ───────── */
 const shoulders = (fill = V3) => P('M26 124 Q28 98 64 95 Q100 98 102 124 Z', fill) + P('M55 82 L73 82 L73 98 Q64 103 55 98 Z', SK2)
 const ears = (cy = 64) => circ(33, cy, 7, SK) + circ(95, cy, 7, SK)
 const eyes = (y = 62) => circ(53, y, 3.2, I, ' stroke="none"') + circ(75, y, 3.2, I, ' stroke="none"')
@@ -68,7 +68,7 @@ const nose = (y = 70) => thin(`M64 ${y - 6} Q61 ${y} 65 ${y + 1}`, 2.4)
 const head = (fill = SK) => P('M34 62 Q34 30 64 30 Q94 30 94 62 Q94 92 64 92 Q34 92 34 62 Z', fill)
 const shortHair = (fill = BR) => P('M33 60 Q30 24 64 22 Q98 24 95 60 Q90 42 78 40 Q64 46 50 40 Q38 42 33 60 Z', fill)
 
-/** tip s sliko (za vzorce: zgornji del brez rokavov kot na listu) */
+/** top with a picture (for patterns: a sleeveless top as on the sheet) */
 const tankTop = (fill: string) => P('M44 24 L52 24 Q54 44 64 46 Q74 44 76 24 L84 24 Q86 50 92 60 L94 108 L34 108 L36 60 Q42 50 44 24 Z', fill) + line('M38 64 Q64 70 90 64')
 
 const mitten = (dx: number, rot: number) => `<g transform="translate(${dx} 0) rotate(${rot} 44 70)">${P('M30 52 Q30 32 46 32 Q60 32 60 52 L60 82 L30 82 Z', C)}${P('M31 60 Q18 56 18 66 Q19 74 31 72', C)}${P('M28 82 L62 82 L62 96 L28 96 Z', W)}${thin('M36 84 L36 94 M42 84 L42 94 M48 84 L48 94 M54 84 L54 94', 2)}${circ(45, 50, 4, W, ' stroke="none"')}${circ(52, 62, 2.5, W, ' stroke="none"')}${circ(39, 64, 2.5, W, ' stroke="none"')}</g>`
@@ -87,11 +87,11 @@ const bed = (x: number, w: number, pillows: number) => {
 
 const car = (x: number, y: number, fill: string) => `<g transform="translate(${x} ${y})">${P('M2 18 Q2 10 10 10 L14 2 Q16 0 20 0 L34 0 Q38 0 40 4 L44 10 Q50 10 50 18 L50 22 L2 22 Z', fill)}${P('M17 3 L35 3 L39 10 L14 10 Z', S2)}${circ(13, 23, 5, DK)}${circ(39, 23, 5, DK)}</g>`
 
-/* ───────── slike ───────── */
+/* ───────── pictures ───────── */
 type Def = [id: string, en: string[], slo: string, cat: PicCat, src: string, svg: string]
 
 const DEFS: Def[] = [
-  // ── OBLAČILA (Clothes.pdf) ──
+  // ── CLOTHES (Clothes.pdf) ──
   ['coat', ['coat'], 'plašč', 'clothes', SRC.clothes, wrap('clothes',
     P('M44 28 L28 52 L26 94 L37 94 L42 58', V2) + P('M84 28 L100 52 L102 94 L91 94 L86 58', V2) +
     P('M44 26 Q64 34 84 26 L90 108 L38 108 Z', V) + P('M52 23 L44 36 L62 48 Z', V3) + P('M76 23 L84 36 L66 48 Z', V3) +
@@ -153,7 +153,7 @@ const DEFS: Def[] = [
     P('M44 30 L26 82 L37 88 L48 58', A) + P('M84 30 L102 82 L91 88 L80 58', A) +
     P('M46 30 Q46 8 64 8 Q82 8 82 30 Z', A2) + P('M42 28 L86 28 L88 100 L40 100 Z', A) + line('M64 30 L64 100') +
     P('M46 70 L82 70 L86 92 L42 92 Z', A2) + line('M64 70 L64 92') + thin('M56 30 L54 48 M72 30 L74 48', 2.4) + circ(54, 50, 2, W) + circ(74, 50, 2, W))],
-  // vzorci (naloga 2 na listu Clothes)
+  // patterns (task 2 on the Clothes sheet)
   ['plain', ['plain'], 'enobarven', 'clothes', SRC.clothes, wrap('clothes', tankTop(V) + shine('M44 72 L42 100'))],
   ['striped', ['striped', 'stripy'], 'črtast', 'clothes', SRC.clothes, wrap('clothes', tankTop('url(#p-stripe)'),
     `<pattern id="p-stripe" width="10" height="10" patternUnits="userSpaceOnUse"><rect width="10" height="10" fill="${W}"/><rect width="5" height="10" fill="${V}"/></pattern>`)],
@@ -161,7 +161,7 @@ const DEFS: Def[] = [
     `<pattern id="p-check" width="14" height="14" patternUnits="userSpaceOnUse"><rect width="14" height="14" fill="${W}"/><rect width="7" height="7" fill="${C}"/><rect x="7" y="7" width="7" height="7" fill="${C}"/></pattern>`)],
   ['floral', ['floral', 'flowery'], 'cvetličen', 'clothes', SRC.clothes, wrap('clothes', tankTop('url(#p-flower)'),
     `<pattern id="p-flower" width="24" height="24" patternUnits="userSpaceOnUse"><rect width="24" height="24" fill="${M2}"/><g fill="${C}"><circle cx="6" cy="2.5" r="2.6"/><circle cx="9.5" cy="6" r="2.6"/><circle cx="6" cy="9.5" r="2.6"/><circle cx="2.5" cy="6" r="2.6"/></g><circle cx="6" cy="6" r="1.8" fill="${A}"/><g fill="${W}"><circle cx="18" cy="14.5" r="2.6"/><circle cx="21.5" cy="18" r="2.6"/><circle cx="18" cy="21.5" r="2.6"/><circle cx="14.5" cy="18" r="2.6"/></g><circle cx="18" cy="18" r="1.8" fill="${A}"/></pattern>`)],
-  // oblika in kroj (naloga 3)
+  // shape and cut (task 3)
   ['flared-trousers', ['flared trousers', 'flares', 'flared'], 'zvončaste hlače', 'clothes', SRC.clothes, wrap('clothes',
     P('M44 16 L84 16 L81 70 L96 114 L70 114 L66 70 L64 46 L62 70 L58 114 L32 114 L47 70 Z', D) + line('M44 26 L84 26') + thin('M53 34 L54 68 M75 34 L74 68', 2) + circ(64, 21, 2.2, W))],
   ['baggy-trousers', ['baggy trousers', 'baggy'], 'široke hlače', 'clothes', SRC.clothes, wrap('clothes',
@@ -182,7 +182,7 @@ const DEFS: Def[] = [
     P('M44 28 L84 28 L86 106 L42 106 Z', S2) + P('M50 26 L64 40 L78 26 L82 18 L64 30 L46 18 Z', W) + line('M64 38 L64 106') +
     circ(64, 52, 2.4, W) + circ(64, 66, 2.4, W) + circ(64, 80, 2.4, W) + circ(64, 94, 2.4, W) + P('M70 46 L80 46 L80 56 L70 56 Z', S))],
 
-  // ── VIDEZ IN TELO (Appearance.pdf, Mock test) ──
+  // ── APPEARANCE AND BODY (Appearance.pdf, Mock test) ──
   ['stubble', ['stubble'], 'strnišče (nekajdnevna brada)', 'body', SRC.appear, wrap('body',
     shoulders() + ears() + head() + dots(64, 82, 22, 9, 70, '#6b5848', 1.2) + dots(42, 74, 6, 10, 18, '#6b5848', 1.2, 3) + dots(86, 74, 6, 10, 18, '#6b5848', 1.2, 5) +
     shortHair() + eyes() + nose() + smile(), '', false)],
@@ -224,7 +224,7 @@ const DEFS: Def[] = [
     P('M57 44 L71 44 L72 88 L56 88 Z', M) + circ(64, 30, 13, SK) + P('M51 27 Q53 15 64 15 Q75 15 77 27 Q70 21 64 22 Q58 21 51 27 Z', BR) +
     circ(59, 30, 2, I, ' stroke="none"') + circ(69, 30, 2, I, ' stroke="none"') + line('M60 36 Q64 38 68 36') +
     `<path d="M40 60 L48 60 M80 60 L88 60" fill="none" stroke="${V}" stroke-width="3"/>` + arrow(34, 60, 44, 60) + arrow(94, 60, 84, 60))],
-  // deli telesa (Appearance, naloga 5 in 6)
+  // body parts (Appearance, tasks 5 and 6)
   ['cheek', ['cheek', 'cheeks'], 'lice', 'body', SRC.appear, wrap('body',
     shoulders(V3) + ears() + head() + circ(48, 74, 9, '#ff9a9a', ' stroke="none" opacity=".75"') + circ(80, 74, 9, '#ff9a9a', ' stroke="none" opacity=".4"') + shortHair(BR2) + eyes() + nose() + smile(78) + arrow(14, 104, 40, 80), '', false)],
   ['eyebrows', ['eyebrows', 'eyebrow'], 'obrvi', 'body', SRC.appear, wrap('body',
@@ -246,7 +246,7 @@ const DEFS: Def[] = [
     P('M22 40 L48 30 L78 64 Q84 78 72 86 L62 112 L44 112 L54 82 Z', SK) + P('M16 32 L48 22 L56 44 L24 54 Z', V) + circ(70, 72, 10, SK2) +
     P('M40 110 L66 110 Q76 112 76 120 L40 120 Z', M) + arrow(110, 50, 86, 66))],
 
-  // ── OPREMA (Places to visit, naloga 4: Equipment) ──
+  // ── EQUIPMENT (Places to visit, task 4: Equipment) ──
   ['boots', ['boots', 'boot', 'hiking boots'], 'pohodni čevlji', 'gear', SRC.equip, wrap('gear',
     P('M34 22 L62 22 L64 66 Q92 66 102 86 L102 94 L28 94 Q26 58 34 22 Z', BR2) + P('M32 22 L64 22 L64 32 L32 32 Z', A) +
     P('M26 94 L104 94 L104 106 L26 106 Z', DK) + thin('M44 40 L58 36 M44 50 L60 46 M44 60 L62 56', 2.6) + thin('M30 100 L100 100', 2) + line('M64 66 Q70 78 64 94'))],
@@ -295,7 +295,7 @@ const DEFS: Def[] = [
     line('M44 60 L56 62 M84 60 L72 62') + `<ellipse cx="64" cy="60" rx="18" ry="3" fill="${G}"/>` +
     P('M64 22 Q78 38 72 52 Q70 58 64 58 Q58 58 56 52 Q50 38 64 22 Z', A) + P('M64 38 Q70 46 67 53 Q64 56 61 53 Q58 46 64 38 Z', C) + `<path d="M50 92 L78 92" fill="none" stroke="${W}" stroke-width="3"/>`)],
 
-  // ── POTOVANJA (Travel, holidays; Places to visit; Mock test) ──
+  // ── TRAVEL (Travel, holidays; Places to visit; Mock test) ──
   ['ferry', ['ferry'], 'trajekt', 'travel', SRC.travel2, wrap('travel',
     P('M80 22 L92 22 L92 50 L80 50 Z', C) + P('M38 36 L78 36 L82 50 L34 50 Z', W) + P('M24 50 L100 50 L104 72 L20 72 Z', W) +
     Array.from({ length: 7 }, (_, i) => circ(32 + i * 10.6, 61, 3, S2, ' stroke-width="2"')).join('') + P('M12 72 L116 72 L104 96 L24 96 Z', S) + line('M18 82 L110 82') +

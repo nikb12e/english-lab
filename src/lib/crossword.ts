@@ -1,5 +1,5 @@
-// Generator križanke: iz seznama besed sestavi čim bolj strnjeno mrežo, kjer se besede križajo kot v pravi križanki
-// (nobena beseda se ne dotika druge s strani, vsaka nova beseda se z mrežo vsaj enkrat križa).
+// Crossword generator: builds the most compact grid possible from a list of words, where the words cross like in a real crossword
+// (no word touches another from the side, every new word crosses the grid at least once).
 import { PICS } from '../data/pictures'
 import { TEXT_CLUES } from '../data/picBank'
 import type { MemState } from './fsrs'
@@ -12,7 +12,7 @@ export interface XGrid { rows: number; cols: number; words: XWord[] }
 
 const letters = (w: string) => w.toUpperCase().replace(/[^A-Z]/g, '')
 
-/** Vse besede, ki lahko pridejo v križanko: slike (namig je slika) in besedilni namigi z listov. */
+/** All words that can appear in the crossword: pictures (the clue is a picture) and text clues from the sheets. */
 export function candidates(): XCand[] {
   const out: XCand[] = []
   for (const p of PICS) {
@@ -37,7 +37,7 @@ function canPlace(grid: Cell, w: string, r: number, c: number, dir: Dir): number
     const rr = r + dr * i, cc = c + dc * i
     const cur = grid.get(k(rr, cc))
     if (cur) { if (cur !== w[i]) return -1; cross++; continue }
-    // nova celica: sosedi pravokotno na smer morajo biti prazni
+    // new cell: neighbours perpendicular to the direction must be empty
     if (grid.has(k(rr + dc, cc + dr)) || grid.has(k(rr - dc, cc - dr))) return -1
   }
   return cross === w.length ? -1 : cross
@@ -84,13 +84,13 @@ function attempt(list: XCand[], target: number, maxW: number, maxH: number, rnd:
   return { grid, placed }
 }
 
-/** Sestavi križanko. `pool` je že urejen po prednosti (besede, ki jih moraš utrditi, najprej). */
+/** Builds the crossword. `pool` is already sorted by priority (words you need to master first). */
 export function buildCrossword(pool: XCand[], target = 8, maxW = 11, maxH = 12): XGrid {
   let seed = (Date.now() % 100000) + 1
   const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647)
   let best: ReturnType<typeof attempt> | null = null
   for (let t = 0; t < 70; t++) {
-    // prednost imajo začetne besede, a vrstni red se rahlo premeša, da je vsaka križanka drugačna
+    // starting words take priority, but the order is shuffled slightly so every crossword is different
     const list = pool.map((w, i) => ({ w, s: i + rnd() * 6 })).sort((a, b) => a.s - b.s).map((x) => x.w)
     const first = list.findIndex((w) => w.answer.length >= 6 && w.answer.length <= maxW)
     if (first > 0) list.unshift(list.splice(first, 1)[0])
@@ -103,14 +103,14 @@ export function buildCrossword(pool: XCand[], target = 8, maxW = 11, maxH = 12):
   const { grid, placed } = best!
   const b = bbox(grid)
   const words = placed.map((w) => ({ ...w, row: w.row - b.r0, col: w.col - b.c0, num: 0 }))
-  // številčenje po vrsti branja
+  // numbering in reading order
   const starts = [...new Set(words.map((w) => w.row * 100 + w.col))].sort((a, b) => a - b)
   for (const w of words) w.num = starts.indexOf(w.row * 100 + w.col) + 1
   words.sort((a, b) => (a.dir === b.dir ? a.num - b.num : a.dir === 'a' ? -1 : 1))
   return { rows: b.r1 - b.r0 + 1, cols: b.c1 - b.c0 + 1, words }
 }
 
-/** Besede za današnjo križanko: najprej slike, ki jih pozabljaš ali še ne znaš, nato pomešano z namigi z listov. */
+/** Words for today's crossword: first pictures you forget or do not know yet, then mixed with clues from the sheets. */
 export function crosswordPool(items: Record<string, MemState>): XCand[] {
   const now = Date.now()
   const all = candidates()
@@ -120,7 +120,7 @@ export function crosswordPool(items: Record<string, MemState>): XCand[] {
     return { c, w }
   }).sort((a, b) => b.w - a.w).map((x) => x.c)
   const texts = all.filter((c) => !c.key).sort(() => Math.random() - 0.5)
-  // mešanica: približno dve slikovni na en besedilni namig
+  // mix: about two picture clues for each text clue
   const out: XCand[] = []
   let i = 0, j = 0
   while (i < pics.length || j < texts.length) {

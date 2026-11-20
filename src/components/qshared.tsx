@@ -15,14 +15,14 @@ export const spring = { duration: 0.5, ease: 'easeOut' as const }
 
 export function Tag({ entry }: { entry: Entry }) {
   const it = entry.item
-  if (it.kind === 'verb' && it.placement) return <span className="k place">Uvrstitev</span>
-  if (entry.kind === 'retry') return <span className="k retry">Ponovi napako</span>
-  if (entry.kind === 'confirm') return <span className="k retry">Utrdi</span>
-  if (entry.kind === 'similar') return <span className="k sim">Podobna</span>
-  if (entry.hard) return <span className="k hard">Izziv</span>
-  if (entry.ai) return <span className="k ai">Novo od AI</span>
-  if (entry.fresh) return <span className="k fresh">Novo</span>
-  return <span className="k review">Ponovitev</span>
+  if (it.kind === 'verb' && it.placement) return <span className="k place">Placement</span>
+  if (entry.kind === 'retry') return <span className="k retry">Repeat the mistake</span>
+  if (entry.kind === 'confirm') return <span className="k retry">Lock in</span>
+  if (entry.kind === 'similar') return <span className="k sim">Similar</span>
+  if (entry.hard) return <span className="k hard">Challenge</span>
+  if (entry.ai) return <span className="k ai">New from AI</span>
+  if (entry.fresh) return <span className="k fresh">New</span>
+  return <span className="k review">Review</span>
 }
 
 
@@ -38,7 +38,7 @@ export function gradeFor(ok: boolean, key: string, secs: number, nFields: number
 }
 
 
-/** Prebere navodilo naloge (z vrzeljo kot premorom), takoj ko se naloga pokaže. */
+/** Reads the task instruction (with the gap as a pause) as soon as the task appears. */
 export function useReadTask(q: string | null | undefined, hint?: string) {
   const text = q ? gapText(q, hint) : null
   useEffect(() => {
@@ -48,9 +48,9 @@ export function useReadTask(q: string | null | undefined, hint?: string) {
   }, [text])
 }
 
-/** Gumb z zvočnikom ob nalogi: še enkrat prebere navodilo (kot pri Duolingu). */
+/** Speaker button next to the task: reads the instruction again (like in Duolingo). */
 export function TaskSay({ q, hint }: { q: string | null | undefined; hint?: string }) {
   const text = q ? gapText(q, hint) : null
   if (!text) return null
-  return <button type="button" className="say-btn" onClick={() => void speakTask(text)} aria-label="Preberi nalogo"><Volume2 /></button>
+  return <button type="button" className="say-btn" onClick={() => void speakTask(text)} aria-label="Read the task"><Volume2 /></button>
 }

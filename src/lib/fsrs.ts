@@ -1,11 +1,11 @@
-// FSRS-5 (Free Spaced Repetition Scheduler) s privzetimi utežmi.
-// Isti algoritem kot v Anki; za vsak predmet učenja vodi stabilnost (S) in težavnost (D) spomina.
+// FSRS-5 (Free Spaced Repetition Scheduler) with the default weights.
+// The same algorithm as in Anki; for every learning item it tracks the stability (S) and difficulty (D) of the memory.
 
-export type Grade = 1 | 2 | 3 | 4 // 1 pozabil, 2 težko, 3 dobro, 4 lahko
+export type Grade = 1 | 2 | 3 | 4 // 1 forgot, 2 hard, 3 good, 4 easy
 
 export interface MemState {
-  S: number // stabilnost v dneh
-  D: number // težavnost 1 do 10
+  S: number // stability in days
+  D: number // difficulty 1 to 10
   reps: number
   lapses: number
   last: number // ms
@@ -14,9 +14,9 @@ export interface MemState {
   correct: number
   errs?: Partial<Record<'inf' | 'past' | 'pp', number>>
   hist?: number[]
-  /** zaporedni pravilni prvi odgovori (po sejah); 2 ali več pomeni »znam« */
+  /** consecutive correct first answers (per session); 2 or more means “known” */
   run?: number
-  /** čas zadnje spremembe, za sinhronizacijo */
+  /** time of the last change, for syncing */
   u: number
 }
 
@@ -55,7 +55,7 @@ function intervalDays(S: number, retention: number, g: Grade) {
   return iv >= 1 ? Math.round(iv) : Math.max(iv, 10 / 1440)
 }
 
-/** Glavna ocena: prvi odgovor v seji. Vrne nov objekt. */
+/** Main rating: the first answer in a session. Returns a new object. */
 export function review(prev: MemState, g: Grade, now: number, retention: number): MemState {
   const c = { ...prev }
   if (!c.reps) {
@@ -82,7 +82,7 @@ export function review(prev: MemState, g: Grade, now: number, retention: number)
   return c
 }
 
-/** Ponovna pravilna rešitev v isti seji (po napaki): kratkoročna okrepitev. */
+/** Solving it correctly again in the same session (after a mistake): short term reinforcement. */
 export function reinforce(prev: MemState, now: number, retention: number): MemState {
   const c = { ...prev }
   c.S = clamp(shortS(c.S, 3), 0.05, 36500)
@@ -92,14 +92,14 @@ export function reinforce(prev: MemState, now: number, retention: number): MemSt
   return c
 }
 
-/** Predogled intervala za gumbe samoocene. */
+/** Interval preview for the self rating buttons. */
 export function previewDays(prev: MemState, g: Grade, now: number, retention: number) {
   const n = review(prev, g, now, retention)
   return (n.due - now) / DAY
 }
 
 export type Maturity = 'new' | 'learn' | 'young' | 'mature'
-/** Zaporedni pravilni odgovori; za stare zapise brez »run« se izračuna iz zgodovine. */
+/** Consecutive correct answers; for old records without “run” it is computed from the history. */
 export function runOf(c?: MemState): number {
   if (!c || !c.reps) return 0
   if (typeof c.run === 'number') return c.run
@@ -108,9 +108,9 @@ export function runOf(c?: MemState): number {
   for (let i = h.length - 1; i >= 0 && h[i] === 1; i--) n++
   return n
 }
-/** Znanje glagola po smiselnem pravilu:
- *  new = še nikoli vprašan, learn = zadnji odgovor napačen, young = enkrat pravilno, mature (znam) = dvakrat zapored pravilno
- *  ali pravilno že ob prvem srečanju. */
+/** Knowledge of a verb by a sensible rule:
+ *  new = never asked, learn = last answer wrong, young = correct once, mature (known) = correct twice in a row
+ *  or correct on the first encounter. */
 export function maturity(c?: MemState): Maturity {
   if (!c || !c.reps) return 'new'
   const r = runOf(c)
@@ -133,7 +133,7 @@ export function fmtInterval(days: number) {
   if (days < 1 / 24) return Math.max(1, Math.round(days * 1440)) + ' min'
   if (days < 1) return Math.round(days * 24) + ' h'
   if (days < 45) return Math.round(days) + ' d'
-  if (days < 365) return Math.round(days / 30) + ' mes'
-  return (days / 365).toFixed(1).replace('.', ',') + ' let'
+  if (days < 365) return Math.round(days / 30) + ' mo'
+  return (days / 365).toFixed(1).toString() + ' y'
 }
-export const fmtDue = (due: number, now = Date.now()) => (due <= now ? 'zdaj' : fmtInterval((due - now) / DAY))
+export const fmtDue = (due: number, now = Date.now()) => (due <= now ? 'now' : fmtInterval((due - now) / DAY))

@@ -12,7 +12,7 @@ import { Kinetic } from './Kinetic'
 const DURATION = 60
 type Q = { v: Verb; f: 'past' | 'pp' }
 
-// Hitri krog izbira glagole okoli tvoje ravni in nekoliko nad njo.
+// The quick round picks verbs around your level and slightly above it.
 function pick(prev?: Q): Q {
   const th = getState().profile.theta
   const pool = VERBS.filter((v) => { const p = pSuccess(th, PRIOR[v.id]); return p > 0.25 && p < 0.92 })
@@ -62,16 +62,16 @@ export function Sprint({ onClose }: { onClose: () => void }) {
     <motion.div className="session" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }}>
       <div className="s-inner">
         <div className="s-top">
-          <button className="iconbtn" onClick={onClose} aria-label="Zapri"><X /></button>
+          <button className="iconbtn" onClick={onClose} aria-label="Close"><X /></button>
           {phase === 'run' && <div className="track"><i style={{ width: `${(left / DURATION) * 100}%`, transition: 'width .1s linear' }} /></div>}
           {phase === 'run' && <div className={'combo' + (streak >= 5 ? ' hot' : '')}>{score}</div>}
         </div>
         {phase === 'ready' && (
           <motion.div className="qcard glass" initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }}>
-            <div className="qmeta"><span className="k fresh">Hitri krog</span><span>60 sekund</span></div>
-            <div className="qword">Koliko oblik v minuti?</div>
-            <p className="lead">Glagol in oblika, ti tipkaš. Glagoli so izbrani okoli tvoje ravni. Rekord: <b>{best}</b>.</p>
-            <div className="s-actions"><button className="btn hero w" onClick={start}><Zap /><span>Začni</span></button></div>
+            <div className="qmeta"><span className="k fresh">Quick round</span><span>60 seconds</span></div>
+            <div className="qword">How many forms in a minute?</div>
+            <p className="lead">A verb and a form, you type. The verbs are picked around your level. Record: <b>{best}</b>.</p>
+            <div className="s-actions"><button className="btn hero w" onClick={start}><Zap /><span>Start</span></button></div>
           </motion.div>
         )}
         {phase === 'run' && (
@@ -82,22 +82,22 @@ export function Sprint({ onClose }: { onClose: () => void }) {
             </AnimatePresence>
             <div className="qhint">{q.v.slo}</div>
             <div className="fields">
-              <Kinetic ref={inp} value={val} onChange={setVal} onEnter={submit} status={flash === null ? 'idle' : flash ? 'ok' : 'bad'} correct={q.v.shown[q.f].join(' / ')} enterKeyHint="go" ariaLabel="Oblika" />
+              <Kinetic ref={inp} value={val} onChange={setVal} onEnter={submit} status={flash === null ? 'idle' : flash ? 'ok' : 'bad'} correct={q.v.shown[q.f].join(' / ')} enterKeyHint="go" ariaLabel="Form" />
             </div>
           </div>
         )}
         {phase === 'end' && (
           <motion.div className="qcard glass" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.9, ease: 'easeOut' as const }}>
-            <div className="qmeta"><span className="k place">Konec</span><span>{score > best ? 'Nov rekord' : `Rekord ${Math.max(best, score)}`}</span></div>
-            <div className="big num">{score}<small> oblik</small></div>
+            <div className="qmeta"><span className="k place">End</span><span>{score > best ? 'New record' : `Record ${Math.max(best, score)}`}</span></div>
+            <div className="big num">{score}<small> forms</small></div>
             {miss.length > 0 && (
               <div className="list glass" style={{ borderRadius: 20, marginTop: 20 }}>
-                {miss.slice(0, 10).map((m, i) => <div className="li" key={i}><div className="li-main"><span className="li-t">{m.q.v.id} <em>· {m.q.v.shown[m.q.f].join('/')}</em></span><span className="li-s">Napisal si »{m.a}«</span></div></div>)}
+                {miss.slice(0, 10).map((m, i) => <div className="li" key={i}><div className="li-main"><span className="li-t">{m.q.v.id} <em>· {m.q.v.shown[m.q.f].join('/')}</em></span><span className="li-s">You wrote “{m.a}”</span></div></div>)}
               </div>
             )}
             <div className="row" style={{ marginTop: 16 }}>
-              <button className="btn" onClick={onClose}>Končaj</button>
-              <button className="btn primary" onClick={start}>Še enkrat</button>
+              <button className="btn" onClick={onClose}>Finish</button>
+              <button className="btn primary" onClick={start}>Once more</button>
             </div>
           </motion.div>
         )}

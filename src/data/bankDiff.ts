@@ -1,5 +1,5 @@
-// Težavnost vsake naloge iz banke, kot jo je ocenil Jev (TypeSafe, odločitveni model): 0 = zelo lahko … 4 = zelo težko
-// za slovenskega dijaka na ravni B1. Algoritem jo uporablja za izbiro nalog na pravi ravni (16. 11. 2026, 1006 nalog).
+// Difficulty of every task in the bank as rated by Jev (TypeSafe, decision model): 0 = very easy … 4 = very hard
+// for a Slovenian student at B1 level. The algorithm uses it to pick tasks at the right level (16 Nov 2026, 1006 tasks).
 export const BANK_DIFF: Record<string, number> = {
   "a_test_00b8067b": 1.52,
   "a_test_0629cd86": 1.37,

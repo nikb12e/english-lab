@@ -1,4 +1,4 @@
-// Novi, bolj igrivi tipi nalog: sestavi poved (ploščice), narek (posluh + črkovanje) in poveži pare.
+// New, more playful task types: build the sentence (tiles), dictation (listening + spelling) and match pairs.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { ArrowRight, Check, Ear, Snail, Volume2 } from 'lucide-react'
@@ -16,21 +16,21 @@ const shuffle = <T,>(a: T[]) => { const b = a.slice(); for (let i = b.length - 1
 const speechOn = () => getState().settings.speech
 const clean = (w: string) => w.toLowerCase().replace(/[^a-z']/g, '')
 
-// prepričljiva napačna oblika za odvečno ploščico (nikoli smešna, kot »forecastedd«)
+// a convincing wrong form for the extra tile (never silly, like “forecastedd”)
 function wrongFor(v: Verb, form: 'past' | 'pp') {
   const ok = (w: string) => !!w && !v.accept[form].has(w) && !/(edd|eded|ingg)$/.test(w) && /^[a-z]+$/.test(w)
   const cands = [form === 'pp' ? v.shown.past[0] : v.shown.pp[0], v.shown.inf[0], ...Array.from({ length: 8 }, () => fakeForm(v, form))]
   return cands.find(ok) || (form === 'pp' ? v.shown.inf[0] + 's' : v.shown.inf[0] + 'ing')
 }
 
-/* ───────── sestavi poved iz ploščic ───────── */
+/* ───────── build the sentence from tiles ───────── */
 export function BuildQ({ entry, onAnswer, onNext }: { entry: Entry; onAnswer: (r: Result) => void; onNext: () => void }) {
   const item = entry.item as VItem
   const v = item.verb
   const s = useMemo(() => sentFor(entry.uid, v.id), [entry.uid, v.id])
   const [, form, text, sl] = s
   const full = text.replace('___', v.shown[form][0])
-  // dolge povedi: začetek je že postavljen, sestaviš zadnjih največ 9 besed
+  // long sentences: the beginning is already placed, you build the last 9 words at most
   const { fixed, words, tiles } = useMemo(() => {
     const all = full.split(/\s+/)
     const cut = Math.max(0, all.length - 9)
@@ -59,14 +59,14 @@ export function BuildQ({ entry, onAnswer, onNext }: { entry: Entry; onAnswer: (r
   }
   return (
     <div className="qcard glass">
-      <div className="qmeta"><Tag entry={entry} /><span>Sestavi poved</span></div>
-      <div className="qhint" style={{ marginTop: 14 }}>Prevedi: <b>{sl}</b> · glagol <b lang="en">{v.id}</b>, ena ploščica je odveč.</div>
+      <div className="qmeta"><Tag entry={entry} /><span>Build the sentence</span></div>
+      <div className="qhint" style={{ marginTop: 14 }}>Translate: <b>{sl}</b> · verb <b lang="en">{v.id}</b>, one tile is extra.</div>
       <div className={'build-line' + (res === null ? '' : res ? ' ok' : ' bad')} lang="en">
         {fixed.length > 0 && <span className="fixed">{fixed.join(' ')}</span>}
         {line.map((id) => (
           <motion.button layout key={id} className="tile on" disabled={res !== null} onClick={() => setLine((l) => l.filter((x) => x !== id))} transition={spring}>{byId(id).w}</motion.button>
         ))}
-        {!line.length && <span className="build-ph">Tapni besede v pravem vrstnem redu</span>}
+        {!line.length && <span className="build-ph">Tap the words in the right order</span>}
       </div>
       <div className="tiles" lang="en">
         {tiles.map((t) => {
@@ -77,22 +77,22 @@ export function BuildQ({ entry, onAnswer, onNext }: { entry: Entry; onAnswer: (r
         })}
       </div>
       {res === null ? (
-        <div className="s-actions"><button className="btn sm" onClick={() => setLine([])}>Počisti</button><button className="btn sm primary" disabled={!line.length} onClick={submit}>Preveri</button></div>
+        <div className="s-actions"><button className="btn sm" onClick={() => setLine([])}>Clear</button><button className="btn sm primary" disabled={!line.length} onClick={submit}>Check</button></div>
       ) : (
         <>
           <motion.div className={'result ' + (res ? 'good' : 'bad')} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={spring}>
-            <h3>{res ? 'Pravilno' : 'Pravilni vrstni red'}<Listen text={full} /></h3>
+            <h3>{res ? 'Correct' : 'Correct order'}<Listen text={full} /></h3>
             <p lang="en" className="sent-full">{full}</p>
-            <p>{form === 'pp' ? `Za have/has/had ali v trpniku: ${v.shown.pp.join('/')}` : `Končano v preteklosti: ${v.shown.past.join('/')}`}. Odveč je bila oblika »{byId('x').w}«.</p>
+            <p>{form === 'pp' ? `After have/has/had or in the passive: ${v.shown.pp.join('/')}` : `Finished in the past: ${v.shown.past.join('/')}`}. The extra form was “{byId('x').w}”.</p>
           </motion.div>
-          <div className="s-actions"><button ref={nextBtn} className="btn sm primary" onClick={onNext}>Naprej<ArrowRight /></button></div>
+          <div className="s-actions"><button ref={nextBtn} className="btn sm primary" onClick={onNext}>Next<ArrowRight /></button></div>
         </>
       )}
     </div>
   )
 }
 
-/* ───────── narek: poslušaj poved in zapiši manjkajočo obliko ───────── */
+/* ───────── dictation: listen to the sentence and write the missing form ───────── */
 export function DictateQ({ entry, onAnswer, onOverride, onNext }: { entry: Entry; onAnswer: (r: Result) => void; onOverride: (r: Result) => void; onNext: () => void }) {
   const item = entry.item as VItem
   const v = item.verb
@@ -124,38 +124,38 @@ export function DictateQ({ entry, onAnswer, onOverride, onNext }: { entry: Entry
   const [a, b] = text.split('___')
   return (
     <div className="qcard glass">
-      <div className="qmeta"><Tag entry={entry} /><span>Narek</span></div>
+      <div className="qmeta"><Tag entry={entry} /><span>Dictation</span></div>
       <div className="dict-btns">
-        <button className="dict-play" onClick={() => void speak(full, 1)} aria-label="Predvajaj poved"><Volume2 /></button>
-        <button className="dict-slow" onClick={() => void speak(full, 0.78)} aria-label="Počasneje"><Snail /></button>
+        <button className="dict-play" onClick={() => void speak(full, 1)} aria-label="Play the sentence"><Volume2 /></button>
+        <button className="dict-slow" onClick={() => void speak(full, 0.78)} aria-label="Slower"><Snail /></button>
       </div>
       <div className="qword sentence" lang="en" style={{ marginTop: 16 }}>
         {a}<span className={'gap' + (res === null ? '' : res ? ' ok' : ' bad')}>{res === null ? ' ' : v.shown[form][0]}</span>{b}
       </div>
-      <div className="qhint">{help ? <>({v.id}) · {sl}</> : 'Poslušaj in zapiši besedo, ki manjka.'}</div>
+      <div className="qhint">{help ? <>({v.id}) · {sl}</> : 'Listen and write the missing word.'}</div>
       <input ref={inp} className="field" lang="en" autoCapitalize="off" autoCorrect="off" spellCheck={false} disabled={res !== null}
-        value={val} onChange={(e) => setVal(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { if (res === null) submit(); else onNext() } }} placeholder="Kaj slišiš?" />
+        value={val} onChange={(e) => setVal(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { if (res === null) submit(); else onNext() } }} placeholder="What do you hear?" />
       {res === null ? (
         <div className="s-actions">
-          {!help ? <button className="btn sm" onClick={() => setHelp(true)}><Ear />Ne slišim</button> : <button className="btn sm" onClick={() => submit(true)}>Ne vem</button>}
-          <button className="btn sm primary" onClick={() => submit()}>Preveri</button>
+          {!help ? <button className="btn sm" onClick={() => setHelp(true)}><Ear />I can't hear it</button> : <button className="btn sm" onClick={() => submit(true)}>I don't know</button>}
+          <button className="btn sm primary" onClick={() => submit()}>Check</button>
         </div>
       ) : (
         <>
           <motion.div className={'result ' + (res || over ? 'good' : 'bad')} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={spring}>
-            <h3>{res ? 'Pravilno slišano' : over ? 'Upoštevano' : 'Še ne'}<Listen text={full} /></h3>
+            <h3>{res ? 'Heard correctly' : over ? 'Noted' : 'Not yet'}<Listen text={full} /></h3>
             <div className="forms" lang="en">{v.shown.inf[0]}<span>·</span>{v.shown.past.join('/')}<span>·</span>{v.shown.pp.join('/')}</div>
             {!res && !over && <Why task={text} given={val} correct={v.shown[form][0]} ctx={`Dictation, verb ${v.id}, ${form}`} />}
-            {!res && !over && val.trim() && <button className="btn ghost sm" onClick={() => { setOver(true); onOverride({ ok: true, grade: 3, secs: 0 }) }}>Imel sem prav</button>}
+            {!res && !over && val.trim() && <button className="btn ghost sm" onClick={() => { setOver(true); onOverride({ ok: true, grade: 3, secs: 0 }) }}>I was right</button>}
           </motion.div>
-          <div className="s-actions"><button ref={nextBtn} className="btn sm primary" onClick={onNext}>Naprej<ArrowRight /></button></div>
+          <div className="s-actions"><button ref={nextBtn} className="btn sm primary" onClick={onNext}>Next<ArrowRight /></button></div>
         </>
       )}
     </div>
   )
 }
 
-/* ───────── poveži pare: infinitiv z obliko ───────── */
+/* ───────── match pairs: infinitive with its form ───────── */
 export function MatchQ({ entry, onAnswer, onNext }: { entry: Entry; onAnswer: (r: Result) => void; onNext: () => void }) {
   const item = entry.item as VItem
   const v = item.verb
@@ -207,8 +207,8 @@ export function MatchQ({ entry, onAnswer, onNext }: { entry: Entry; onAnswer: (r
   const V = (id: string) => pairs.find((p) => p.id === id)!
   return (
     <div className="qcard glass">
-      <div className="qmeta"><Tag entry={entry} /><span>Poveži pare</span></div>
-      <div className="qword long" style={{ marginTop: 14 }}>Poveži infinitiv z njegovo obliko <b>{form === 'pp' ? 'past participle' : 'past simple'}</b>.</div>
+      <div className="qmeta"><Tag entry={entry} /><span>Match the pairs</span></div>
+      <div className="qword long" style={{ marginTop: 14 }}>Match the infinitive with its form <b>{form === 'pp' ? 'past participle' : 'past simple'}</b>.</div>
       <div className="match-grid" lang="en">
         <div className="match-col">
           {left.map((id) => (
@@ -225,10 +225,10 @@ export function MatchQ({ entry, onAnswer, onNext }: { entry: Entry; onAnswer: (r
       {finished && (
         <>
           <motion.div className={'result ' + (!missMain.current && miss.current <= 1 ? 'good' : 'bad')} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={spring}>
-            <h3>{miss.current === 0 ? <>Brez napake <Check size={18} /></> : `Napake: ${miss.current}`}</h3>
+            <h3>{miss.current === 0 ? <>No mistakes <Check size={18} /></> : `Mistakes: ${miss.current}`}</h3>
             <div className="forms" lang="en">{v.shown.inf[0]}<span>·</span>{v.shown.past.join('/')}<span>·</span>{v.shown.pp.join('/')}</div>
           </motion.div>
-          <div className="s-actions"><button ref={nextBtn} className="btn sm primary" onClick={onNext}>Naprej<ArrowRight /></button></div>
+          <div className="s-actions"><button ref={nextBtn} className="btn sm primary" onClick={onNext}>Next<ArrowRight /></button></div>
         </>
       )}
     </div>

@@ -1,5 +1,5 @@
-// Poimenuj sliko: ilustracija besede z učnih listov. Nova ali še negotova beseda: izbira med štirimi (prepoznavanje);
-// utrjena: vpis brez možnosti (priklic). Tako naloga raste s tabo, kot pri ostalih tipih nalog.
+// Name the picture: an illustration of a word from the worksheets. A new or still uncertain word: choose from four (recognition);
+// mastered: typing without options (recall). This way the task grows with you, as with other task types.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ArrowRight, Check, Lightbulb } from 'lucide-react'
@@ -15,14 +15,14 @@ import { Kinetic } from './Kinetic'
 
 const shuffle = <T,>(a: T[]) => { const b = a.slice(); for (let i = b.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [b[i], b[j]] = [b[j], b[i]] } return b }
 
-/** Ilustracija (SVG iz pictures.ts). */
+/** Illustration (SVG from pictures.ts). */
 export function PicImg({ id, size = 200, className = '' }: { id: string; size?: number; className?: string }) {
   const p = PIC_BY_ID[id]
   if (!p) return null
-  return <div className={'pic ' + className} style={{ width: size, height: size }} aria-label="Ilustracija" role="img" dangerouslySetInnerHTML={{ __html: p.svg }} />
+  return <div className={'pic ' + className} style={{ width: size, height: size }} aria-label="Illustration" role="img" dangerouslySetInnerHTML={{ __html: p.svg }} />
 }
 
-/** Tri prepričljive napačne možnosti iz iste skupine (oblačila z oblačili …). */
+/** Three convincing wrong options from the same group (clothes with clothes …). */
 export function distractors(p: Pic, n = 3): string[] {
   const same = shuffle(PICS.filter((x) => x.cat === p.cat && x.id !== p.id)).map((x) => x.en[0])
   return same.filter((w) => !p.en.includes(w)).slice(0, n)
@@ -32,7 +32,7 @@ export function PicQ({ entry, card, onAnswer, onOverride, onNext }: { entry: Ent
   const item = entry.item as Extract<QItem, { kind: 'card' }>
   const p = PIC_BY_ID[card.img!]
   const st = getState().items[item.key]
-  // prepoznavanje, dokler beseda ni utrjena (in pri ponovitvi napake), nato priklic
+  // recognition until the word is mastered (and when repeating a mistake), then recall
   const choose = !st?.reps || (st.S || 0) < 2 || entry.kind === 'retry'
   const options = useMemo(() => shuffle([p.en[0], ...distractors(p)]), [p])
   const [val, setVal] = useState('')
@@ -78,7 +78,7 @@ export function PicQ({ entry, card, onAnswer, onOverride, onNext }: { entry: Ent
       <motion.div className="pic-stage" initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.35, ease: 'easeOut' }}>
         <PicImg id={p.id} size={196} />
       </motion.div>
-      <div className="pic-q">{choose ? 'Kaj je na sliki?' : 'Napiši, kaj je na sliki'}</div>
+      <div className="pic-q">{choose ? 'What is in the picture?' : 'Write what is in the picture'}</div>
 
       {choose ? (
         <div className="choices pic-choices">
@@ -96,12 +96,12 @@ export function PicQ({ entry, card, onAnswer, onOverride, onNext }: { entry: Ent
         <>
           {res === null && (
             <div className="hintline">
-              <button className="btn ghost sm" disabled={hintN >= 2} onClick={() => { setHintN((h) => h + 1); inp.current?.focus() }}><Lightbulb />{hintN === 0 ? 'Namig' : hintN === 1 ? 'Še en namig' : 'Ni več namigov'}</button>
+              <button className="btn ghost sm" disabled={hintN >= 2} onClick={() => { setHintN((h) => h + 1); inp.current?.focus() }}><Lightbulb />{hintN === 0 ? 'Hint' : hintN === 1 ? 'Another hint' : 'No more hints'}</button>
               {hintTxt && <motion.span key={hintN} className="hintw" lang="en" initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }}>{hintTxt}</motion.span>}
             </div>
           )}
           <div className="fields">
-            <Kinetic ref={inp} value={val} onChange={setVal} onEnter={() => (res === null ? submit() : onNext())} status={res === null ? 'idle' : good ? 'ok' : 'bad'} correct={best} ariaLabel="Angleška beseda" />
+            <Kinetic ref={inp} value={val} onChange={setVal} onEnter={() => (res === null ? submit() : onNext())} status={res === null ? 'idle' : good ? 'ok' : 'bad'} correct={best} ariaLabel="English word" />
           </div>
         </>
       )}
@@ -109,12 +109,12 @@ export function PicQ({ entry, card, onAnswer, onOverride, onNext }: { entry: Ent
       <AnimatePresence>
         {res !== null && (
           <motion.div className={'result ' + (good ? 'good' : 'bad')} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ ...spring, delay: 0.08 }}>
-            <h3>{good ? 'Pravilno' : 'Še ne'}<Listen text={p.en[0]} /></h3>
-            <p className="pic-ans"><b lang="en">{p.en[0]}</b> pomeni »{p.slo}«</p>
-            {alts.length > 0 && <p className="small muted">Sprejeto tudi: <span lang="en">{alts.join(', ')}</span></p>}
-            <p className="small muted">Vir: {p.src}</p>
+            <h3>{good ? 'Correct' : 'Not yet'}<Listen text={p.en[0]} /></h3>
+            <p className="pic-ans"><b lang="en">{p.en[0]}</b> in Slovenian: “{p.slo}”</p>
+            {alts.length > 0 && <p className="small muted">Also accepted: <span lang="en">{alts.join(', ')}</span></p>}
+            <p className="small muted">Source: {p.src}</p>
             {!choose && res === false && !over && val.trim() && lev(norm(val), norm(best)) === 1 && (
-              <button className="btn ghost sm" style={{ paddingLeft: 0 }} onClick={() => { setOver(true); onOverride({ ok: true, grade: 3, secs: 5 }) }}>Tipkarska napaka, štej kot pravilno</button>
+              <button className="btn ghost sm" style={{ paddingLeft: 0 }} onClick={() => { setOver(true); onOverride({ ok: true, grade: 3, secs: 5 }) }}>Typo, count it as correct</button>
             )}
           </motion.div>
         )}
@@ -122,10 +122,10 @@ export function PicQ({ entry, card, onAnswer, onOverride, onNext }: { entry: Ent
 
       <div className="s-actions">
         {res === null ? (
-          choose ? <button className="btn sm" onClick={() => answerChoice('')}>Ne vem</button>
-            : <><button className="btn sm" onClick={() => submit(true)}>Ne vem</button><button className="btn sm primary" onClick={() => submit()}>Preveri</button></>
+          choose ? <button className="btn sm" onClick={() => answerChoice('')}>I don't know</button>
+            : <><button className="btn sm" onClick={() => submit(true)}>I don't know</button><button className="btn sm primary" onClick={() => submit()}>Check</button></>
         ) : (
-          <button ref={nextBtn} className="btn sm primary" onClick={onNext}>Naprej<ArrowRight /></button>
+          <button ref={nextBtn} className="btn sm primary" onClick={onNext}>Next<ArrowRight /></button>
         )}
       </div>
     </div>

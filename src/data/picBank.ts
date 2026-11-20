@@ -1,13 +1,13 @@
-// Kartice »Poimenuj sliko« in namigi za križanko. Vse besede in namigi so z učnih listov na Drivu (mapa Angleščina).
+// “Name the picture” cards and crossword clues. All words and clues come from the English worksheets.
 import type { TypeCard } from './types'
 import { PICS, type Pic } from './pictures'
 
-/** začetna težavnost (0 lahko … 3 težko); pravo težavnost zate nato prilagodi algoritem */
+/** starting difficulty (0 easy … 3 hard); the algorithm then adjusts the real difficulty for you */
 const HARD = new Set(['stubble', 'receding-hair', 'waistcoat', 'tights', 'upturned-nose', 'puncture', 'polo-neck', 'mittens', 'flared-trousers', 'baggy-trousers', 'platform-shoes', 'knee-length-skirt', 'dressing-gown', 'sweat-jacket', 'sweatpants', 'gas-stove', 'mosquito-repellent', 'lorry', 'double-decker', 'twin-room', 'thumbs', 'heel', 'plump', 'lungs'])
 const MED = new Set(['blouse', 'cardigan', 'collar', 'zip', 'freckles', 'ginger', 'moustache', 'oval-face', 'round-face', 'skinny', 'cheek', 'eyebrows', 'toes', 'knee', 'flippers', 'goggles', 'sleeping-bag', 'swimming-costume', 'suntan-lotion', 'first-aid-kit', 'ferry', 'tram', 'steering-wheel', 'tyre', 'fishing-boat', 'petrol-station', 'jet', 'traffic-jam', 'boarding-card', 'balcony', 'double-room', 'backpacker', 'desert-island', 'snow-capped-mountain', 'ruins', 'striped', 'checked', 'floral', 'plain', 'tracksuit', 'polo-shirt', 'short-sleeved-shirt', 'running-shoes'])
 export const picDiff = (p: Pic) => (HARD.has(p.id) ? 2.5 : MED.has(p.id) ? 1.5 : 0.6)
 
-/** vzorec za namig: s_______ b__ (8, 3) */
+/** pattern for the hint: s_______ b__ (8, 3) */
 export function pattern(w: string) {
   const parts = w.split(/([ -])/)
   const shown = parts.map((p) => (p === ' ' || p === '-' ? p : p[0] + '_'.repeat(Math.max(0, p.length - 1)))).join('')
@@ -21,16 +21,16 @@ export const PIC_CARDS: TypeCard[] = PICS.map((p) => ({
   q: 'What is this called in English?',
   a: p.en,
   hint: pattern(p.en[0]),
-  note: `${p.en[0]} pomeni »${p.slo}«. Vir: ${p.src}.`,
+  note: `${p.en[0]} in Slovenian: “${p.slo}”. Source: ${p.src}.`,
   sec: 'v_pic',
   img: p.id,
   diff: picDiff(p),
 }))
 
-/** Besedilni namigi za križanko, dobesedno z listov (definicije in dopolnjevanke). */
+/** Text clues for the crossword, word for word from the worksheets (definitions and gap fills). */
 export interface Clue { a: string; clue: string; src: string }
 export const TEXT_CLUES: Clue[] = [
-  // Mock test 1, naloga 1 (križanka) in 5
+  // Mock test 1, task 1 (crossword) and 5
   { a: 'book', clue: 'reserve a holiday', src: 'Mock test 1' },
   { a: 'scruffy', clue: 'untidy appearance', src: 'Mock test 1' },
   { a: 'cruise', clue: 'holiday at sea', src: 'Mock test 1' },

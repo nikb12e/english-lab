@@ -3,11 +3,11 @@ import { VERBS } from '../lib/verbs'
 import { maturity, retrievability, type MemState, type Maturity } from '../lib/fsrs'
 import { PRIOR } from '../lib/adaptive'
 
-// Krogla spomina: vsak od 178 glagolov je točka na sferi. Barva = stanje, svetlost = verjetnost priklica.
-// Vleka s prstom jo zavrti 1:1, ob spustu ohrani hitrost in se umiri (inercija), nato se spet počasi vrti sama.
+// Memory sphere: each of the 178 verbs is a point on a sphere. Colour = state, brightness = recall probability.
+// Dragging with a finger spins it 1:1, on release it keeps its speed and settles (inertia), then slowly spins on its own again.
 
 const DARK = typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches
-// En odtenek (systemBlue) v štirih jakostih: nov je siv, nato vedno bolj nasičena modra.
+// One hue (systemBlue) in four strengths: new is grey, then an increasingly saturated blue.
 const COLORS: Record<Maturity, [number, number, number]> = DARK
   ? { new: [72, 72, 74], learn: [48, 84, 130], young: [28, 110, 210], mature: [10, 132, 255] }
   : { new: [199, 199, 204], learn: [160, 202, 255], young: [80, 160, 255], mature: [0, 122, 255] }
@@ -33,7 +33,7 @@ export function Orb({ items, onSelect, children }: { items: Record<string, MemSt
   const pts = useRef<P[]>([])
   const [tip, setTip] = useState<{ x: number; y: number; id: string } | null>(null)
 
-  // točke: Fibonaccijeva sfera; težji glagoli bližje južnemu polu
+  // points: Fibonacci sphere; harder verbs closer to the south pole
   useEffect(() => {
     const sorted = VERBS.slice().sort((a, b) => PRIOR[a.id] - PRIOR[b.id])
     const n = sorted.length
@@ -76,7 +76,7 @@ export function Orb({ items, onSelect, children }: { items: Record<string, MemSt
       const grow = 1 - Math.pow(1 - age, 4) // ease-out
       if (!drag) {
         ry += vy; rx += vx
-        vy += (auto - vy) * 0.02 // inercija se umiri nazaj v počasno vrtenje
+        vy += (auto - vy) * 0.02 // inertia settles back into a slow spin
         vx *= 0.94
         rx += (-0.35 - rx) * 0.01
       }
@@ -95,7 +95,7 @@ export function Orb({ items, onSelect, children }: { items: Record<string, MemSt
         return { p, sx: cx + x1 * R * persp, sy: cy + y2 * R * persp, z: z2, s: persp }
       })
       list.sort((a, b) => b.z - a.z)
-      // povezave med sosedi: tanka mreža spomina
+      // links between neighbours: a thin mesh of memory
       ctx.lineWidth = 0.6
       for (let i = 0; i < list.length; i++) {
         const a = list[i]
@@ -111,7 +111,7 @@ export function Orb({ items, onSelect, children }: { items: Record<string, MemSt
         }
       }
       for (const { p, sx, sy, z, s } of list) {
-        const front = (1 - z) / 2 // 0 zadaj, 1 spredaj
+        const front = (1 - z) / 2 // 0 back, 1 front
         const known = p.m !== 'new'
         const pulse = 1; void t
         const size = (known ? 6 + 4 * p.r : 4.4) * s * (0.6 + 0.55 * front) * grow
@@ -155,7 +155,7 @@ export function Orb({ items, onSelect, children }: { items: Record<string, MemSt
       if (!drag) return
       const p = pt(e)
       if (drag.moved < 8) {
-        // dotik: najbližja točka spredaj
+        // touch: nearest point at the front
         let best: { id: string; sx: number; sy: number; d: number } | null = null
         for (const q of proj) {
           if (q.z > 0.15) continue
@@ -164,7 +164,7 @@ export function Orb({ items, onSelect, children }: { items: Record<string, MemSt
         }
         if (best) { setTip({ x: best.sx, y: best.sy, id: best.id }); sel.current(best.id) }
       } else {
-        // predaja hitrosti: zadnjih nekaj premikov določi zagon
+        // velocity hand off: the last few moves set the momentum
         const h = drag.hist
         const a = h[0], b = h[h.length - 1]
         const dt = Math.max(16, b.t - a.t)
@@ -196,7 +196,7 @@ export function Orb({ items, onSelect, children }: { items: Record<string, MemSt
   const v = tip ? VERBS.find((x) => x.id === tip.id) : null
   return (
     <div ref={wrap} className="orb-wrap">
-      <canvas ref={canvas} aria-label="Krogla spomina: vsak glagol je ena točka. Povleci za vrtenje, tapni točko za podrobnosti." role="img" />
+      <canvas ref={canvas} aria-label="Memory sphere: every verb is one dot. Drag to rotate, tap a dot for details." role="img" />
       {children}
       {tip && v && (
         <div className="orb-tip" style={{ left: tip.x, top: tip.y }}>{v.id} <em>· {v.shown.past.join('/')} · {v.shown.pp.join('/')}</em></div>

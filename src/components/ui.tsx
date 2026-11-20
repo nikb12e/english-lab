@@ -12,14 +12,14 @@ export const spring = { duration: 0.5, ease: 'easeOut' as const }
 
 export type Tab = 'today' | 'practice' | 'verbs' | 'progress'
 const TABS: { id: Tab; label: string; icon: ReactNode }[] = [
-  { id: 'today', label: 'Danes', icon: <NotebookPen /> },
-  { id: 'practice', label: 'Vaje', icon: <ListChecks /> },
-  { id: 'verbs', label: 'Glagoli', icon: <Table2 /> },
-  { id: 'progress', label: 'Napredek', icon: <ChartNoAxesColumn /> },
+  { id: 'today', label: 'Today', icon: <NotebookPen /> },
+  { id: 'practice', label: 'Practice', icon: <ListChecks /> },
+  { id: 'verbs', label: 'Verbs', icon: <Table2 /> },
+  { id: 'progress', label: 'Progress', icon: <ChartNoAxesColumn /> },
 ]
 export function TabBar({ tab, onTab }: { tab: Tab; onTab: (t: Tab) => void }) {
   return (
-    <motion.nav className="tabbar" aria-label="Glavna navigacija" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.9, ease: 'easeOut' as const, delay: 0.3 }}>
+    <motion.nav className="tabbar" aria-label="Main navigation" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.9, ease: 'easeOut' as const, delay: 0.3 }}>
       {TABS.map((t) => (
         <button key={t.id} className={'tab' + (tab === t.id ? ' on' : '')} onClick={() => { if (t.id !== tab) sfx.tap(); onTab(t.id) }} aria-current={tab === t.id ? 'page' : undefined}>
           {tab === t.id && <motion.span layoutId="tabbg" className="tab-bg" transition={{ duration: 0.45, ease: 'easeOut' as const }} />}
@@ -48,7 +48,7 @@ export function Sheet({ open, onClose, children, label }: { open: boolean; onClo
             initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={{ duration: 0.5, ease: 'easeOut' as const }}
             drag="y" dragControls={controls} dragListener={false} dragConstraints={{ top: 0, bottom: 0 }} dragElastic={{ top: 0.04, bottom: 0.7 }}
             onDragEnd={(_, i) => { if (i.offset.y > 110 || i.velocity.y > 550) onClose() }}>
-            {/* vleči se da samo za ročaj, zato vsebina normalno drsi tudi na telefonu */}
+            {/* only the handle can be dragged, so the content scrolls normally on phones too */}
             <div className="grab-zone" onPointerDown={(e) => controls.start(e)}><div className="grab" /></div>
             {children}
           </motion.div>
@@ -70,9 +70,9 @@ export function VerbRow({ v, c, showErr, onOpen, theta }: { v: Verb; c?: MemStat
         <span className="li-t" lang="en">{v.id} <em>· {v.shown.past.join('/')} · {v.shown.pp.join('/')}</em></span>
         <span className="li-s">
           {v.slo}
-          {showErr && errs > 0 && <span className="badge bad">{errs}× napaka</span>}
-          {c && c.lapses >= 3 && <span className="badge bad">trd oreh</span>}
-          {!c?.reps && hard && <span className="badge">težak</span>}
+          {showErr && errs > 0 && <span className="badge bad">{errs}× mistake</span>}
+          {c && c.lapses >= 3 && <span className="badge bad">tough nut</span>}
+          {!c?.reps && hard && <span className="badge">hard</span>}
         </span>
       </span>
       <span className="li-r">{R === null ? '' : R + ' %'}{R !== null && <span className="minibar"><i style={{ width: `${R}%` }} /></span>}</span>
@@ -87,7 +87,7 @@ export function VerbDetail({ id, onPractice }: { id: string; onPractice: (id: st
   if (!v) return null
   const m = maturity(c)
   const fam = family(v)
-  const MT = { new: 'Nov', learn: 'Učim se', young: 'Utrjujem', mature: 'Obvladam' }
+  const MT = { new: 'New', learn: 'Learning', young: 'Strengthening', mature: 'Mastered' }
   const p = Math.round(pSuccess(theta, PRIOR[id]) * 100)
   return (
     <div>
@@ -98,20 +98,20 @@ export function VerbDetail({ id, onPractice }: { id: string; onPractice: (id: st
       <div className="small muted" style={{ marginTop: 8 }} lang="en">{v.third} · {v.ing}</div>
       {v.note && <p className="small" style={{ color: 'var(--amber)' }}>{v.note}</p>}
       <div className="kv">
-        <div><b>{MT[m]}</b><span>stanje</span></div>
-        <div><b>{c?.reps ? Math.round(retrievability(c) * 100) + ' %' : `${p} %`}</b><span>{c?.reps ? 'verjetnost priklica' : 'ocena, da ga znaš'}</span></div>
-        <div><b>{c?.reps ? fmtDue(c.due) : '–'}</b><span>naslednja ponovitev</span></div>
-        <div><b>{c ? `${c.correct}/${c.seen}` : '0/0'}</b><span>pravilno</span></div>
+        <div><b>{MT[m]}</b><span>status</span></div>
+        <div><b>{c?.reps ? Math.round(retrievability(c) * 100) + ' %' : `${p} %`}</b><span>{c?.reps ? 'recall probability' : 'estimate that you know it'}</span></div>
+        <div><b>{c?.reps ? fmtDue(c.due) : '–'}</b><span>next review</span></div>
+        <div><b>{c ? `${c.correct}/${c.seen}` : '0/0'}</b><span>correct</span></div>
       </div>
       {c && c.seen > 0 && (
         <div className="formerr">
-          {(['inf', 'past', 'pp'] as const).map((f) => <div key={f} className={(c.errs?.[f] || 0) > 0 ? 'hi' : ''}><b>{c.errs?.[f] || 0}</b><span>napak: {FORM_SL[f]}</span></div>)}
+          {(['inf', 'past', 'pp'] as const).map((f) => <div key={f} className={(c.errs?.[f] || 0) > 0 ? 'hi' : ''}><b>{c.errs?.[f] || 0}</b><span>mistakes: {FORM_SL[f]}</span></div>)}
         </div>
       )}
-      {fam.length > 0 && <p className="small" style={{ marginTop: 16, color: 'var(--ink-2)' }}><b>Isti vzorec:</b> {fam.map((x) => `${x.shown.inf[0]} ${x.shown.past[0]} ${x.shown.pp[0]}`).join(' · ')}</p>}
+      {fam.length > 0 && <p className="small" style={{ marginTop: 16, color: 'var(--ink-2)' }}><b>Same pattern:</b> {fam.map((x) => `${x.shown.inf[0]} ${x.shown.past[0]} ${x.shown.pp[0]}`).join(' · ')}</p>}
       <div className="row" style={{ marginTop: 20 }}>
-        {canSpeak() && <button className="btn" onClick={() => speakVerb(v.id, [v.shown.inf[0], v.shown.past.join(' or '), v.shown.pp.join(' or ')].join(', '))}><Volume2 />Izgovori</button>}
-        <button className="btn primary" onClick={() => onPractice(id)}><Play />Vadi zdaj</button>
+        {canSpeak() && <button className="btn" onClick={() => speakVerb(v.id, [v.shown.inf[0], v.shown.past.join(' or '), v.shown.pp.join(' or ')].join(', '))}><Volume2 />Pronounce</button>}
+        <button className="btn primary" onClick={() => onPractice(id)}><Play />Practise now</button>
       </div>
     </div>
   )

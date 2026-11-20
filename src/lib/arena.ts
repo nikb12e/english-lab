@@ -1,6 +1,6 @@
-// Arena v živo: igralci, ki pritisnejo »Igraj« v istem 10-sekundnem oknu, pristanejo v isti sobi (Supabase Realtime).
-// Vprašanja in tekmeci so določeni s semenom sobe, zato jih vse naprave izračunajo enako; prek omrežja potujejo samo odgovori.
-// Vsako vprašanje ima svoj čas (glede na vrsto in dolžino besedila); ko odgovorijo vsi, igra takoj nadaljuje.
+// Live arena: players who press “Play” in the same 10 second window land in the same room (Supabase Realtime, hosted version only).
+// Questions and opponents are set by the room seed, so all devices compute them the same way; only answers travel over the network.
+// Each question has its own time (based on type and text length); when everyone has answered, the game moves on at once.
 import { VERBS, type Verb } from './verbs'
 import { PRIOR, pSuccess } from './adaptive'
 import { TEST_BANK } from '../data/testBank'
@@ -13,11 +13,11 @@ import { BOT_NAMES, hash, rng } from './bots'
 export const LOBBY_MS = 10_000
 export const REVEAL_MS = 3_600
 export const LAST_REVEAL_MS = 4_200
-export const EARLY_PAUSE_MS = 700 // ko vsi odgovorijo, kratek premor pred razkritjem
+export const EARLY_PAUSE_MS = 700 // when everyone has answered, a short pause before the reveal
 export const N_Q = 8
 export const ROOM_SIZE = 6
 
-/* ───────── skupna ura (popravek glede na strežnik) ───────── */
+/* ───────── shared clock (offset relative to the server) ───────── */
 let offset = 0
 export async function syncClock() {
   try {
@@ -30,33 +30,33 @@ export async function syncClock() {
 }
 export const now = () => Date.now() + offset
 
-/** Soba, v katero prideš zdaj: okno se zapre ob koncu tekočih 10 s (če je do konca manj kot 3 s, naslednje). */
+/** The room you join now: the window closes at the end of the current 10 s (if less than 3 s are left, the next one). */
 export function nextSlot(t = now()) {
   let slot = Math.floor(t / LOBBY_MS) + 1
   if (slot * LOBBY_MS - t < 3000) slot++
   return { slot, start: slot * LOBBY_MS + 800 }
 }
 
-/* ───────── vprašanja ───────── */
+/* ───────── questions ───────── */
 export type AKind = 'choice' | 'tf' | 'type' | 'listen' | 'translate'
 export interface AQ {
   kind: AKind
-  label: string // vrsta naloge, prikazana igralcu
+  label: string // task type shown to the player
   q: string
   sub?: string
-  options: string[] // pri vpisu: pravilni odgovor in tipične napake (samo za Jev in tekmece)
+  options: string[] // when typing: the correct answer and typical mistakes (only for Jev and the opponents)
   correct: number
-  accept?: string[] // pri vpisu: vsi sprejeti odgovori
-  verbInput?: boolean // vpis oblike glagola (stroga primerjava oblik)
+  accept?: string[] // when typing: all accepted answers
+  verbInput?: boolean // typing a verb form (strict comparison of forms)
   b: number
-  vid?: string // glagol za izgovorjavo (pri poslušanju se predvaja ob začetku)
-  limit: number // čas za odgovor v ms
-  img?: string // ilustracija (Kaj je na sliki?)
+  vid?: string // verb for pronunciation (in listening it plays at the start)
+  limit: number // time to answer in ms
+  img?: string // illustration (What is in the picture?)
 }
 const pick = <T,>(r: () => number, a: T[]) => a[Math.floor(r() * a.length)]
 function shuffleR<T>(r: () => number, a: T[]) { const b = a.slice(); for (let i = b.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [b[i], b[j]] = [b[j], b[i]] } return b }
 
-/** Čas za vprašanje: osnova po vrsti + čas branja (dolga vprašanja dobijo bistveno več). */
+/** Time for a question: a base by type + reading time (long questions get much more). */
 const BASE: Record<AKind, number> = { choice: 6000, translate: 6000, tf: 7000, listen: 9500, type: 11000 }
 function limitFor(kind: AKind, q: string, sub: string | undefined, options: string[]) {
   const chars = q.length + (sub?.length || 0) + (kind === 'type' ? 0 : options.join(' ').length)
@@ -73,7 +73,7 @@ function wrongForms(v: Verb, form: 'past' | 'pp') {
 }
 const formName = (f: 'past' | 'pp') => (f === 'pp' ? 'past participle' : 'past simple')
 
-/** Izberi obliko glagola (4 možnosti). */
+/** Choose the verb form (4 options). */
 function verbQ(r: () => number): AQ | null {
   const v = pick(r, easyVerbs)
   const form = r() < 0.5 ? 'past' : 'pp'
@@ -81,19 +81,19 @@ function verbQ(r: () => number): AQ | null {
   const wrong = wrongForms(v, form)
   if (wrong.length < 3) return null
   const opts = shuffleR(r, [right, ...shuffleR(r, wrong).slice(0, 3)])
-  return mk({ kind: 'choice', label: 'Oblika glagola', q: form === 'pp' ? 'Past participle' : 'Past simple', sub: `${v.shown.inf[0]} · ${v.slo}`, options: opts, correct: opts.indexOf(right), b: PRIOR[v.id] ?? 0, vid: v.id })
+  return mk({ kind: 'choice', label: 'Verb form', q: form === 'pp' ? 'Past participle' : 'Past simple', sub: `${v.shown.inf[0]} · ${v.slo}`, options: opts, correct: opts.indexOf(right), b: PRIOR[v.id] ?? 0, vid: v.id })
 }
 
-/** Vpiši obliko glagola (težje: brez možnosti). */
+/** Type the verb form (harder: no options). */
 function typeVerbQ(r: () => number): AQ | null {
   const v = pick(r, easyVerbs)
   const form = r() < 0.5 ? 'past' : 'pp'
   const wrong = wrongForms(v, form)
   if (!wrong.length) return null
-  return mk({ kind: 'type', label: 'Vpiši obliko', q: `Napiši ${formName(form)}`, sub: `${v.shown.inf[0]} · ${v.slo}`, options: [v.shown[form][0], ...wrong.slice(0, 3)], correct: 0, accept: [...v.accept[form]], verbInput: true, b: (PRIOR[v.id] ?? 0) + 0.5, vid: v.id })
+  return mk({ kind: 'type', label: 'Type the form', q: `Write ${formName(form)}`, sub: `${v.shown.inf[0]} · ${v.slo}`, options: [v.shown[form][0], ...wrong.slice(0, 3)], correct: 0, accept: [...v.accept[form]], verbInput: true, b: (PRIOR[v.id] ?? 0) + 0.5, vid: v.id })
 }
 
-/** Pravilno ali napačno: poved z (ne)pravilno obliko glagola. */
+/** True or false: a sentence with a (wrong or) correct verb form. */
 const ALL_S: Sentence[] = [...SENTENCES, ...SENTENCES_AI]
 function tfQ(r: () => number): AQ | null {
   for (let g = 0; g < 8; g++) {
@@ -105,17 +105,17 @@ function tfQ(r: () => number): AQ | null {
     const wrong = wrongForms(v, form).filter((w) => w !== v.shown.inf[0] || r() < 0.3)
     if (!good && !wrong.length) continue
     const filled = s[2].replace('___', good ? v.shown[form][0] : pick(r, wrong))
-    const options = ['Pravilno', 'Napačno']
-    return mk({ kind: 'tf', label: 'Pravilno ali napačno', q: filled, sub: 'Je glagol v pravilni obliki?', options, correct: good ? 0 : 1, b: (PRIOR[v.id] ?? 0) - 0.2, vid: v.id })
+    const options = ['Correct', 'Wrong']
+    return mk({ kind: 'tf', label: 'Right or wrong', q: filled, sub: 'Is the verb in the right form?', options, correct: good ? 0 : 1, b: (PRIOR[v.id] ?? 0) - 0.2, vid: v.id })
   }
   return null
 }
 
-/** Poslušaj: predvaja se glagol (infinitiv, past simple, past participle), izberi pravilno zapisano obliko. */
+/** Listen: a verb form plays (infinitive, past simple, past participle), choose the correctly spelled form. */
 function misspell(r: () => number, w: string): string {
   const ops = [
-    () => { const i = 1 + Math.floor(r() * (w.length - 2)); return w.slice(0, i) + w[i + 1] + w[i] + w.slice(i + 2) }, // zamenjava
-    () => { const i = 1 + Math.floor(r() * (w.length - 1)); return w.slice(0, i) + w.slice(i + 1) }, // izpust
+    () => { const i = 1 + Math.floor(r() * (w.length - 2)); return w.slice(0, i) + w[i + 1] + w[i] + w.slice(i + 2) }, // substitution
+    () => { const i = 1 + Math.floor(r() * (w.length - 1)); return w.slice(0, i) + w.slice(i + 1) }, // omission
     () => { const i = Math.floor(r() * w.length); return w.slice(0, i + 1) + w[i] + w.slice(i + 1) }, // podvojitev
     () => w.replace(/ough|augh|ought|aught/, (m) => (m.startsWith('ou') ? m.replace('ou', 'au') : m.replace('au', 'ou'))),
     () => w.replace(/gh/, 'g').replace(/ea/, 'e').replace(/ew/, 'ue'),
@@ -133,12 +133,12 @@ function listenQ(r: () => number): AQ | null {
     for (let k = 0; k < 20 && bad.size < 3; k++) { const m = misspell(r, right); if (m !== right && /^[a-z]+$/.test(m) && !v.accept[form].has(m)) bad.add(m) }
     if (bad.size < 3) continue
     const opts = shuffleR(r, [right, ...bad])
-    return mk({ kind: 'listen', label: 'Poslušaj in izberi', q: `Kako se pravilno zapiše ${formName(form)}?`, sub: 'Poslušaj glagol', options: opts, correct: opts.indexOf(right), b: (PRIOR[v.id] ?? 0) + 0.3, vid: v.id })
+    return mk({ kind: 'listen', label: 'Listen and choose', q: `How is it spelled: ${formName(form)}?`, sub: 'Listen to the verb', options: opts, correct: opts.indexOf(right), b: (PRIOR[v.id] ?? 0) + 0.3, vid: v.id })
   }
   return null
 }
 
-/** Prevedi: slovenska beseda, izberi angleško (oblačila, materiali, vzorci). */
+/** Translate: a Slovenian word, choose the English one (clothes, materials, patterns). */
 function translateQ(r: () => number): AQ | null {
   const cards = (TEST_BANK['v_clothes']?.cards || []).filter((c) => c.kind === 'type' && /Slovene word (.+?) into English/.test(c.q))
   if (cards.length < 4) return null
@@ -148,22 +148,22 @@ function translateQ(r: () => number): AQ | null {
   const right = c.a[0]
   const others = shuffleR(r, cards.filter((x) => x.kind === 'type' && x.a[0] !== right).map((x) => (x.kind === 'type' ? x.a[0] : ''))).slice(0, 3)
   const opts = shuffleR(r, [right, ...others])
-  return mk({ kind: 'translate', label: 'Prevedi', q: word, sub: 'Kako se reče v angleščini?', options: opts, correct: opts.indexOf(right), b: -0.2 })
+  return mk({ kind: 'translate', label: 'Translate', q: word, sub: 'How do you say it in English?', options: opts, correct: opts.indexOf(right), b: -0.2 })
 }
 
-/** Kaj je na sliki: ilustracija besede z učnih listov, štiri možnosti iz iste skupine. */
+/** What is in the picture: an illustration of a word from the worksheets, four options from the same group. */
 function picQ(r: () => number): AQ | null {
   const p = pick(r, PICS)
   const others = shuffleR(r, PICS.filter((x) => x.cat === p.cat && x.id !== p.id)).slice(0, 3).map((x) => x.en[0])
   if (others.length < 3) return null
   const opts = shuffleR(r, [p.en[0], ...others])
   const lvl = picDiff(p)
-  return mk({ kind: 'choice', label: 'Kaj je na sliki?', q: '', options: opts, correct: opts.indexOf(p.en[0]), b: -0.9 + lvl * 0.5, img: p.id })
+  return mk({ kind: 'choice', label: 'What is in the picture?', q: '', options: opts, correct: opts.indexOf(p.en[0]), b: -0.9 + lvl * 0.5, img: p.id })
 }
 
-/** Naloge s testa z izbiro (členi, besedišče, idiomi, glagoli stanja). */
+/** Multiple choice tasks from the test (articles, vocabulary, idioms, state verbs). */
 const CARD_SECS = ['a_test', 'v_conf', 'p_state', 'v_explain_idiom', 'v_odd', 'v_announce', 'v_holiday', 'v_idiom', 'v_appear']
-const SEC_LABEL: Record<string, string> = { a_test: 'Člen', v_conf: 'Pravilna beseda', p_state: 'Present Simple / Continuous', v_explain_idiom: 'Pomen idioma', v_odd: 'Ne spada zraven', v_announce: 'Obvestila', v_holiday: 'Počitnice', v_idiom: 'Idiom', v_appear: 'Videz in osebnost' }
+const SEC_LABEL: Record<string, string> = { a_test: 'Article', v_conf: 'The right word', p_state: 'Present Simple / Continuous', v_explain_idiom: 'Meaning of the idiom', v_odd: 'Odd one out', v_announce: 'Announcements', v_holiday: 'Holidays', v_idiom: 'Idiom', v_appear: 'Appearance and personality' }
 function cardQ(r: () => number): AQ | null {
   const secs = CARD_SECS.filter((s) => TEST_BANK[s])
   for (let g = 0; g < 6; g++) {
@@ -173,24 +173,24 @@ function cardQ(r: () => number): AQ | null {
     const c = pick(r, cards)
     if (c.kind !== 'choice') continue
     const order = shuffleR(r, c.options.map((_, i) => i))
-    return mk({ kind: 'choice', label: SEC_LABEL[sec] || 'Naloga s testa', q: c.q, options: order.map((i) => c.options[i]), correct: order.indexOf(c.correct), b: sec === 'a_test' ? 0.35 : 0.15 })
+    return mk({ kind: 'choice', label: SEC_LABEL[sec] || 'Task from the test', q: c.q, options: order.map((i) => c.options[i]), correct: order.indexOf(c.correct), b: sec === 'a_test' ? 0.35 : 0.15 })
   }
   return null
 }
 
-/** Kratek vpis iz testa (nasprotja, -ing oblike): odgovor ena beseda. */
+/** Short typed answer from the test (opposites, -ing forms): a one word answer. */
 function typeCardQ(r: () => number): AQ | null {
   for (const sec of shuffleR(r, ['v_opp', 'p_spell'])) {
     const cards = (TEST_BANK[sec]?.cards || []).filter((c) => c.kind === 'type' && c.a.length && c.a[0].length <= 16 && c.q.length <= 90)
     if (!cards.length) continue
     const c = pick(r, cards)
     if (c.kind !== 'type') continue
-    return mk({ kind: 'type', label: sec === 'v_opp' ? 'Vpiši nasprotje' : 'Vpiši obliko', q: c.q, options: [c.a[0], c.a[0] + 's', 'un' + c.a[0]].filter((x, i, a) => a.indexOf(x) === i), correct: 0, accept: c.a, b: 0.2 })
+    return mk({ kind: 'type', label: sec === 'v_opp' ? 'Write the opposite' : 'Type the form', q: c.q, options: [c.a[0], c.a[0] + 's', 'un' + c.a[0]].filter((x, i, a) => a.indexOf(x) === i), correct: 0, accept: c.a, b: 0.2 })
   }
   return null
 }
 
-/** Vprašanja sobe: pestra mešanica vrst; enako na vseh napravah. */
+/** Questions for the room: a varied mix of types; the same on all devices. */
 const PLAN: (() => (r: () => number) => AQ | null)[] = [
   () => verbQ, () => cardQ, () => tfQ, () => listenQ, () => picQ, () => typeVerbQ, () => translateQ, () => typeCardQ, () => cardQ, () => picQ, () => tfQ,
 ]
@@ -212,17 +212,17 @@ export function roomQuestions(slot: number): AQ[] {
   return out
 }
 
-/* ───────── točke (kot Kahoot: pravilno in hitro, glede na čas vprašanja) ───────── */
+/* ───────── points (like Kahoot: correct and fast, relative to the question time) ───────── */
 export function points(ok: boolean, ms: number, streak: number, limit: number) {
   if (!ok) return 0
   const t = Math.max(0, Math.min(1, ms / limit))
   return Math.round(1000 * (1 - t / 2)) + Math.min(3, Math.max(0, streak - 1)) * 100
 }
 
-/* ───────── časovnica: vsako vprašanje svoj čas, takojšen konec, ko odgovorijo vsi ───────── */
+/* ───────── timeline: each question has its own time, instant end when everyone has answered ───────── */
 export interface Slot { start: number; end: number; revEnd: number }
-/** Izračuna začetke in konce vprašanj. allMs(i) vrne največji čas odgovora, če so odgovorili VSI, sicer null.
- *  Ker se uporabijo prijavljeni časi odgovorov (ne trenutek prejema), je časovnica enaka na vseh napravah. */
+/** Computes the starts and ends of questions. allMs(i) returns the longest answer time if EVERYONE answered, otherwise null.
+ *  Because the reported answer times are used (not the moment of receipt), the timeline is the same on all devices. */
 export function timeline(start: number, qs: AQ[], allMs: (i: number) => number | null): Slot[] {
   const out: Slot[] = []
   let s = start
@@ -236,10 +236,10 @@ export function timeline(start: number, qs: AQ[], allMs: (i: number) => number |
   return out
 }
 
-/* ───────── tekmeci v sobi ───────── */
+/* ───────── opponents in the room ───────── */
 export interface Player { id: string; name: string; theta: number; bot?: boolean; joinAt?: number }
 
-/** Prilagajanje: če igraš sam z boti in pogosto zmagaš, so boti močnejši; če si pogosto zadnji, šibkejši. */
+/** Adapting: if you play alone with bots and often win, the bots get stronger; if you are often last, weaker. */
 export function arenaAdjust(): number {
   try {
     const places: number[] = JSON.parse(localStorage.getItem('el:arena') || '[]')
@@ -255,7 +255,7 @@ export function rememberPlace(place: number) {
   } catch { /* */ }
 }
 
-/** Dopolni sobo z boti do ROOM_SIZE. Moč botov je okoli povprečja ljudi v sobi, z razponom (eden je vedno premagljiv). */
+/** Fills the room with bots up to ROOM_SIZE. Bot strength is around the average of the people in the room, with a spread (one is always beatable). */
 export function fillBots(slot: number, humans: Player[], adjust: number): Player[] {
   const need = Math.max(0, ROOM_SIZE - humans.length)
   const r = rng(hash('arena-bots-' + slot))
@@ -266,7 +266,7 @@ export function fillBots(slot: number, humans: Player[], adjust: number): Player
   return offs.map((o, i) => ({ id: `bot:${slot}:${i}`, name: names[i], theta: mean + o + (humans.length === 1 ? adjust : 0), bot: true, joinAt: 0.15 + r() * 0.75 }))
 }
 
-/** Odločitve Jev za sobo: p[i] = verjetnost, da učenec izbere posamezen odgovor; d[i] = težavnost 0 (zelo lahko) do 4 (zelo težko). */
+/** Jev's decisions for the room: p[i] = probability that a learner picks each answer; d[i] = difficulty from 0 (very easy) to 4 (very hard). */
 export interface JevRoom { p: number[][]; d: number[] }
 export async function fetchJevRoom(slot: number, qs: AQ[]): Promise<JevRoom | null> {
   try {
@@ -280,14 +280,14 @@ export async function fetchJevRoom(slot: number, qs: AQ[]): Promise<JevRoom | nu
   } catch { return null }
 }
 
-/** Odgovor bota na vprašanje i. Z Jev: težavnost določi Jev, napačni odgovori sledijo temu, kar bi učenec realno izbral.
- *  Čas odgovora je sorazmeren s časom vprašanja (dolga vprašanja berejo dlje), poslušanje doda čas posnetka. */
+/** A bot's answer to question i. With Jev: Jev sets the difficulty and wrong answers follow what a learner would realistically choose.
+ *  Answer time is proportional to the question time (long questions take longer to read), listening adds the length of the recording. */
 export function botAnswer(slot: number, bot: Player, i: number, q: AQ, jv?: JevRoom | null): { choice: number; ms: number } {
   const r = rng(hash(`arena-a2-${slot}-${bot.id}-${i}`))
   const jp = jv?.p?.[i]
   const jd = jv?.d?.[i]
   const b = (typeof jd === 'number' ? -1.4 + jd * 0.75 : q.b) + (q.kind === 'type' ? 0.4 : 0)
-  const ease = q.kind === 'tf' ? 0.8 : q.kind === 'type' ? 0 : 0.4 // izbira je lažja od pisanja, da/ne še lažje
+  const ease = q.kind === 'tf' ? 0.8 : q.kind === 'type' ? 0 : 0.4 // choosing is easier than typing, true/false even easier
   const p = Math.min(0.96, Math.max(0.1, pSuccess(bot.theta + ease, b)))
   const ok = r() < p
   const speed = Math.max(0, Math.min(1, (bot.theta + 1.5) / 3.5))

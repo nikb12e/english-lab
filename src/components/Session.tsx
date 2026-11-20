@@ -18,7 +18,7 @@ import { FixQ, PickQ, OddQ, ExplainQ, WriteQ, Why, Listen } from './Tasks'
 import { BuildQ, DictateQ, MatchQ } from './Tasks2'
 import { PicQ } from './Pics'
 import { recordAnswer } from '../lib/weak'
-import { diagnose, type Diag } from '../lib/ai'
+import { diagnose, aiOn, type Diag } from '../lib/ai'
 import { RuleExplain, ruleFor, type RuleId } from './Explain'
 import { VERBS } from '../lib/verbs'
 import { maturity } from '../lib/fsrs'
@@ -40,19 +40,19 @@ export function Session({ items, title, onClose, grow = false }: { items: QItem[
   const [finished, setFinished] = useState(!items.length)
   const stats = useRef({ first: new Map<string, boolean>(), missed: new Set<string>(), answered: 0, start: Date.now(), theta0: getState().profile.theta, best: 0, added: 0, xp: 0, placement: items.some((i) => i.kind === 'verb' && i.placement) })
   const snap = useRef<MemState | null>(null)
-  // zadnjih nekaj odgovorov: iz njih se sproti prilagaja težavnost (če gre slabo, lažje naloge in nič novega)
+  // the last few answers: difficulty adapts to them as you go (if it goes badly, easier tasks and nothing new)
   const flow = useRef<number[]>([])
   const challenges = useRef(0)
-  // v vaji, kjer si sam izbral tip naloge, tipa ne menjamo; v mešanih sejah ga prilagaja tok
+  // in a drill where you picked the task type yourself, the type is not changed; in mixed sessions the flow adjusts it
   const mixed = useRef(grow || new Set(items.flatMap((q) => (q.kind === 'verb' ? [q.task] : []))).size > 1 || items.some((q) => q.kind === 'card'))
   const lastChallenge = useRef(-10)
   const [flowNote, setFlowNote] = useState<null | 'up' | 'down'>(null)
   const [gain, setGain] = useState<{ n: number; k: number } | null>(null)
-  // animirana razlaga: uspešnost po vrsti nalog v tej seji in mejniki znanja
+  // animated explanation: accuracy by task type in this session and knowledge milestones
   const cats = useRef(new Map<string, { n: number; ok: number }>())
   const retries = useRef(new Map<string, number>())
   const similarN = useRef(0)
-  const exam = title === 'Preverjanje'
+  const exam = title === 'Check'
   const shownRules = useRef(new Set<RuleId>())
   const missNotes = useRef<string[]>([])
   const pendingRule = useRef<{ rule: RuleId; pct?: number } | null>(null)
@@ -64,7 +64,7 @@ export function Session({ items, title, onClose, grow = false }: { items: QItem[
     return () => { document.body.style.overflow = ''; hush(); setFlow(0) }
   }, [])
 
-  // glas za naslednji dve nalogi se pripravi vnaprej, zato navodilo zazveni takoj, ko se naloga pokaže
+  // the voice for the next two tasks is prepared in advance, so the instruction sounds as soon as the task appears
   useEffect(() => {
     if (!getState().settings.speech) return
     for (const e of queue.slice(0, 3)) {
@@ -89,10 +89,10 @@ export function Session({ items, title, onClose, grow = false }: { items: QItem[
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cur?.uid, queue[0]?.uid, queue[1]?.uid, queue[2]?.uid])
 
-  // sproti: GPT-6 Luna med vajo ustvari nove naloge (najprej za tvoje šibke točke) in jih vrine v vrsto
+  // live (hosted version): the language model creates new tasks during practice (first for your weak points) and slips them into the queue
   const [aiNote, setAiNote] = useState<null | 'gen' | number>(null)
   useEffect(() => {
-    if (exam || stats.current.placement || items.length < 4) return
+    if (exam || stats.current.placement || items.length < 4 || !aiOn()) return
     const secs = liveSecsFor(items, getState().profile)
     if (!secs.length) return
     let alive = true
@@ -136,18 +136,18 @@ export function Session({ items, title, onClose, grow = false }: { items: QItem[
     const prevRun = runOf(c)
     if (firstTime || override) {
       c = { ...review(c, grade, now, st.settings.retention), errs: c.errs, hist: c.hist, seen: c.seen, correct: c.correct }
-      // znanje: pravilno ob prvem srečanju (brez namiga) ali dvakrat zapored pravilno pomeni »znam«
+      // knowledge: correct on first encounter (without a hint) or correct twice in a row means “known”
       if (r.ok) c.run = (wasNew && grade >= 3) || placement ? 2 : (override ? Math.max(prevRun, 1) : prevRun + 1)
       else c.run = 0
       if ((c.run || 0) >= 2) {
-        // znan glagol ne sme priti jutri znova: vsaj tri tedne do naslednje ponovitve
+        // a known verb must not come back tomorrow: at least three weeks until the next review
         c.S = Math.max(c.S, 21)
         c.due = Math.max(c.due, now + c.S * DAY)
       }
     }
     else if (r.ok) {
       c = reinforce(c, now, st.settings.retention)
-      // popravek v isti seji: pravilno pri ponovitvi in nato še pri potrditvi (nekaj nalog kasneje) = dvakrat zapored, glagol je utrjen
+      // fix in the same session: correct on the repeat and again on the confirmation (a few tasks later) = twice in a row, the verb is mastered
       if (entry.kind === 'retry') c.run = Math.max(runOf(c), 1)
       else if (entry.kind === 'confirm') c.run = Math.max(runOf(c), 2)
     }
@@ -215,7 +215,7 @@ export function Session({ items, title, onClose, grow = false }: { items: QItem[
         if (d) np.days[td] = { ...d, c: d.c + 1, x: (d.x || 0) + xp }
         np.correct = (np.correct || 0) + 1
       }
-      // sposobnost iz kartic s testa (težavnost oceni Jev): pol koraka, ker je kartic več vrst
+      // ability from the test cards (difficulty rated by Jev): half a step, because there are several kinds of cards
       if (entry.item.kind === 'card' && firstTime && !override) {
         const cb = cardB(entry.item.card)
         if (cb != null) {
@@ -223,7 +223,7 @@ export function Session({ items, title, onClose, grow = false }: { items: QItem[
           np.theta = Math.max(-3, Math.min(4, np.theta + (u.theta - np.theta) * 0.5))
         }
       }
-      // sposobnost: samo prvi odgovor na glagol v seji
+      // ability: only the first answer to a verb in a session
       if (entry.item.kind === 'verb' && entry.item.task !== 'si' && (firstTime || override)) {
         const id = entry.item.verb.id
         const b = bOf(p)(id)
@@ -248,14 +248,14 @@ export function Session({ items, title, onClose, grow = false }: { items: QItem[
       if (!r.ok && !placement) {
         stats.current.missed.add(key)
       }
-      // po napaki pride še podobna naloga (druga kartica iste vrste ali glagol iste družine), da vzorec res utrdiš
+      // after a mistake a similar task follows (another card of the same type or a verb of the same family) so the pattern really sticks
       if (!r.ok && !placement && !exam && entry.kind !== 'similar' && similarN.current < 8) {
         const s3 = getState()
         const ex = new Set([key, ...nq.map((e) => e.item.key), ...stats.current.first.keys()])
         const sim = similarTo(entry.item, s3.items, s3.settings, ex)
         if (sim) { similarN.current++; nq = [...nq]; nq.splice(Math.min(1, nq.length), 0, { item: sim, kind: 'similar', uid: ++uidc, fresh: !s3.items[sim.key]?.reps }) }
       }
-      // na preverjanju ni ponavljanja med testom; sicer se napaka vrne največ dvakrat
+      // during a check there is no repetition within the test; otherwise a mistake comes back at most twice
       const tries = (retries.current.get(key) || 0)
       if (!r.ok && !placement && !exam && tries < 2) {
         retries.current.set(key, tries + 1)
@@ -265,8 +265,8 @@ export function Session({ items, title, onClose, grow = false }: { items: QItem[
         nq = [...nq]
         nq.splice(Math.min(7, nq.length), 0, { item: { ...entry.item } as QItem, kind: 'confirm', uid: ++uidc, fresh: false })
       }
-      // nova skupina glagolov pride šele, ko so vsi začeti glagoli utrjeni in v vrsti ni več novih
-      // tok seje (»flow«): zadnjih 6 odgovorov odloči, ali naloge olajšamo ali otežimo
+      // a new group of verbs comes only when all started verbs are mastered and there are no new ones left in the queue
+      // session flow: the last 6 answers decide whether tasks get easier or harder
       const f = flow.current.slice(-6)
       const acc = f.length ? f.reduce((a, b) => a + b, 0) / f.length : 1
       let trail = 0
@@ -283,7 +283,7 @@ export function Session({ items, title, onClose, grow = false }: { items: QItem[
         setFlow(nextFlow)
         setFlowNote(nextFlow === 1 ? 'up' : nextFlow === -1 ? 'down' : null)
         if (nextFlow !== 0) window.setTimeout(() => setFlowNote(null), 3200)
-        // prihodnje glagolske naloge (do 5) dobijo nov tip po novem toku
+        // upcoming verb tasks (up to 5) get a new type according to the new flow
         const s2 = getState()
         let changed = 0
         nq = nq.map((e) => {
@@ -292,7 +292,7 @@ export function Session({ items, title, onClose, grow = false }: { items: QItem[
           return { ...e, item: autoVerbItem(e.item.verb, s2.items, s2.settings) }
         })
       }
-      // ko ti gre odlično: občasno izziv, težka naloga s testa (največ 4 na sejo, vsaj 5 nalog narazen)
+      // when you are doing great: an occasional challenge, a hard task from the test (at most 4 per session, at least 5 tasks apart)
       if (nextFlow === 1 && !placement && !exam && r.ok && challenges.current < 4 && stats.current.answered - lastChallenge.current >= 5) {
         const s2 = getState()
         const ex = new Set([key, ...nq.map((e) => e.item.key), ...stats.current.first.keys()])
@@ -366,14 +366,14 @@ export function Session({ items, title, onClose, grow = false }: { items: QItem[
     <motion.div className="session" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }}>
       <div className="s-inner">
         <div className="s-top">
-          <button className="iconbtn" onClick={onClose} aria-label="Zapri vajo"><X /></button>
+          <button className="iconbtn" onClick={onClose} aria-label="Close practice"><X /></button>
           {!finished && (
-            <div className="track" aria-label={`Napredek ${Math.round(pct)} %`}>
+            <div className="track" aria-label={`Progress ${Math.round(pct)} %`}>
               <motion.i animate={{ width: `${Math.max(2, pct)}%` }} transition={{ duration: 0.6, ease: 'easeOut' as const }} />
             </div>
           )}
           {!finished && (
-            <motion.div key={combo} className={'combo' + (combo >= 5 ? ' hot' : '')} initial={{ opacity: 0.4 }} animate={{ opacity: 1 }} transition={{ duration: 0.4, ease: 'easeOut' as const }} aria-label={`Zaporedje ${combo}`}>
+            <motion.div key={combo} className={'combo' + (combo >= 5 ? ' hot' : '')} initial={{ opacity: 0.4 }} animate={{ opacity: 1 }} transition={{ duration: 0.4, ease: 'easeOut' as const }} aria-label={`Streak ${combo}`}>
               {combo >= 2 ? `×${combo}` : remaining}
             </motion.div>
           )}
@@ -384,12 +384,12 @@ export function Session({ items, title, onClose, grow = false }: { items: QItem[
         <AnimatePresence>
           {!finished && flowNote !== null && aiNote === null && (
             <motion.div className={'ai-note flow-' + flowNote} role="status" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.25 }}>
-              {flowNote === 'up' ? <><Flame />Gre ti odlično, prihajajo težje naloge</> : <><LifeBuoy />Malo lažje, da utrdiš osnove</>}
+              {flowNote === 'up' ? <><Flame />You're doing great, harder tasks are coming</> : <><LifeBuoy />A bit easier, so you can lock in the basics</>}
             </motion.div>
           )}
           {!finished && aiNote !== null && (
             <motion.div className={'ai-note' + (aiNote === 'gen' ? ' gen' : '')} role="status" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.25 }}>
-              <Sparkles />{aiNote === 'gen' ? 'AI sproti pripravlja nove naloge zate' : `${aiNote} ${aiNote === 1 ? 'nova naloga' : aiNote === 2 ? 'novi nalogi' : aiNote <= 4 ? 'nove naloge' : 'novih nalog'} od AI v vrsti`}
+              <Sparkles />{aiNote === 'gen' ? 'AI is preparing new tasks for you' : `${aiNote} new ${aiNote === 1 ? 'task' : 'tasks'} from AI in the queue`}
             </motion.div>
           )}
         </AnimatePresence>
@@ -454,7 +454,7 @@ function Burst({ n }: { n: number }) {
   )
 }
 
-const TASK_NAME: Record<string, string> = { forms: 'Tri oblike', inf: 'Iz infinitiva', reverse: 'Nazaj', si: '-s in -ing', listen: 'Narek', context: 'V stavku', hunt: 'Lov na napako', fix: 'Popravi napako', odd: 'Kateri ne spada', pick: 'Izberi obliko', build: 'Sestavi poved', dictate: 'Narek povedi', match: 'Poveži pare' }
+const TASK_NAME: Record<string, string> = { forms: 'Three forms', inf: 'From the infinitive', reverse: 'Back', si: '-s in -ing', listen: 'Dictation', context: 'In a sentence', hunt: 'Spot the mistake', fix: 'Fix the mistake', odd: 'Odd one out', pick: 'Choose the form', build: 'Build the sentence', dictate: 'Sentence dictation', match: 'Match the pairs' }
 
 function useTimer(active: boolean, seconds: number, onEnd: () => void) {
   const [left, setLeft] = useState(seconds)
@@ -482,18 +482,18 @@ function TimerRing({ left, total }: { left: number; total: number }) {
   )
 }
 
-/* ───────────────────────── glagol: več polj ───────────────────────── */
+/* ───────────────────────── verb: several fields ───────────────────────── */
 function VerbQ({ entry, onAnswer, onOverride, onNext }: { entry: Entry; onAnswer: (r: Result) => void; onOverride: (r: Result) => void; onNext: () => void }) {
   const item = entry.item as Extract<QItem, { kind: 'verb' }>
   const v = item.verb
   const task = item.task
   const settings = getState().settings
   const brutal = false
-  // pri nalogi »nazaj« dobiš eno obliko, napišeš ostali dve
+  // in the “backwards” task you get one form and write the other two
   const given = useMemo<Form | null>(() => (task === 'reverse' ? (Math.random() < 0.6 ? 'pp' : 'past') : task === 'inf' ? 'inf' : null), [task])
   const heard = useMemo<Form>(() => (Math.random() < 0.5 ? 'past' : 'pp'), [])
   const fields: string[] = task === 'si' ? ['third', 'ing'] : (['inf', 'past', 'pp'] as const).filter((f) => f !== given)
-  const labels: Record<string, string> = { inf: 'Infinitive', past: 'Past simple', pp: 'Past participle', third: 'He / she / it', ing: '-ing oblika' }
+  const labels: Record<string, string> = { inf: 'Infinitive', past: 'Past simple', pp: 'Past participle', third: 'He / she / it', ing: '-ing form' }
   const answerOf = (f: string): string[] => (f === 'third' ? [v.third] : f === 'ing' ? [v.ing] : v.shown[f as Form])
   const acceptOf = (f: string): Set<string> => (f === 'third' ? new Set([v.third]) : f === 'ing' ? new Set([v.ing]) : v.accept[f as Form])
   const [vals, setVals] = useState<Record<string, string>>({})
@@ -524,7 +524,7 @@ function VerbQ({ entry, onAnswer, onOverride, onNext }: { entry: Entry; onAnswer
     setRes(r)
     const secs = (Date.now() - t0.current) / 1000
     onAnswer({ ok: all, grade: gradeFor(all, item.key, secs, fields.length, hints), errFields: fields.filter((f) => !r[f] && ['inf', 'past', 'pp'].includes(f)) as Form[], secs })
-    // izgovorjava vedno, tudi po napaki: ravno takrat jo najbolj potrebuješ
+    // pronunciation always, even after a mistake: that is exactly when you need it most
     if (settings.speech) setTimeout(() => say(), all ? 60 : 350)
     setTimeout(() => nextBtn.current?.focus({ preventScroll: true }), 60)
   }
@@ -556,18 +556,18 @@ function VerbQ({ entry, onAnswer, onOverride, onNext }: { entry: Entry; onAnswer
 
   const prompt = task === 'forms' || task === 'listen' ? (task === 'listen' ? null : v.slo) : task === 'si' ? v.id : v.shown[given!][0]
   const sub =
-    task === 'forms' ? (v.dup ? `angleško se začne na »${v.id[0]}«, ${v.id.length} črk` : 'napiši vse tri oblike')
+    task === 'forms' ? (v.dup ? `starts with “${v.id[0]}”, ${v.id.length} letters` : 'write all three forms')
       : task === 'inf' ? v.slo
-        : task === 'reverse' ? `to je ${given === 'pp' ? 'past participle' : 'past simple'}; napiši ostali obliki`
-          : task === 'si' ? 'he / she / it in -ing oblika'
-            : 'poslušaj obliko in napiši vse tri'
+        : task === 'reverse' ? `that is ${given === 'pp' ? 'past participle' : 'past simple'}; write the other two forms`
+          : task === 'si' ? 'he / she / it and the -ing form'
+            : 'listen to the form and write all three'
 
   return (
     <div className="qcard glass">
       <div className="qmeta"><Tag entry={entry} /><span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>{TASK_NAME[task]}{brutal && !res && <TimerRing left={left} total={total} />}</span></div>
       {task === 'listen' ? (
         <>
-          <motion.button className="play" onClick={() => say(heard)} whileTap={{ scale: 0.92 }} aria-label="Predvajaj znova">
+          <motion.button className="play" onClick={() => say(heard)} whileTap={{ scale: 0.92 }} aria-label="Play again">
             <motion.span className="ring" animate={{ scale: [1, 1.25], opacity: [0.6, 0] }} transition={{ duration: 1.6, repeat: Infinity }} />
             <Play />
           </motion.button>
@@ -591,7 +591,7 @@ function VerbQ({ entry, onAnswer, onOverride, onNext }: { entry: Entry; onAnswer
             status={!res ? 'idle' : res[f] || over ? 'ok' : 'bad'}
             correct={answerOf(f).join(' / ')}
             enterKeyHint={i === fields.length - 1 ? 'done' : 'next'}
-            note={res && res[f] && checkForm(vals[f] || '', acceptOf(f)).parts.some((p) => !answerOf(f).includes(p)) ? `Sprejeto. Na listu: ${answerOf(f).join(' / ')}` : undefined}
+            note={res && res[f] && checkForm(vals[f] || '', acceptOf(f)).parts.some((p) => !answerOf(f).includes(p)) ? `Accepted. On the sheet: ${answerOf(f).join(' / ')}` : undefined}
           />
         ))}
       </div>
@@ -599,16 +599,16 @@ function VerbQ({ entry, onAnswer, onOverride, onNext }: { entry: Entry; onAnswer
       <AnimatePresence>
         {res && (
           <motion.div className={'result ' + (good ? 'good' : 'bad')} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, ease: 'easeOut' as const, delay: 0.1 }}>
-            <h3>{good ? (hints ? 'Pravilno, z namigom' : 'Pravilno') : 'Še ne'}</h3>
+            <h3>{good ? (hints ? 'Correct, with a hint' : 'Correct') : 'Not yet'}</h3>
             <div className="forms" lang="en">
               {task === 'si' ? (<>{v.id}<span>·</span>{v.third}<span>·</span>{v.ing}</>) : (<>{v.shown.inf[0]}<span>·</span>{v.shown.past.join('/')}<span>·</span>{v.shown.pp.join('/')}</>)}
             </div>
-            <p>{v.slo}{task !== 'si' && <>. Vzorec: {TYPE_TXT[v.type]}</>}.{st && st.lapses >= 3 && <> <b style={{ color: 'var(--coral)' }}>Pozabljen že {st.lapses}×.</b></>}</p>
+            <p>{v.slo}{task !== 'si' && <>. Pattern: {TYPE_TXT[v.type]}</>}.{st && st.lapses >= 3 && <> <b style={{ color: 'var(--coral)' }}>Forgotten already {st.lapses}×.</b></>}</p>
             {v.note && <p>{v.note}</p>}
-            {task !== 'si' && fam.length > 0 && <div className="fam"><b>Isti vzorec:</b> {fam.map((x) => `${x.shown.inf[0]} ${x.shown.past[0]} ${x.shown.pp[0]}`).join(' · ')}</div>}
-            <p>{good ? <>Naslednjič čez <b>{st ? fmtDue(st.due) : 'kmalu'}</b>.</> : 'Vrne se čez nekaj nalog, dokler ga ne napišeš pravilno.'}</p>
+            {task !== 'si' && fam.length > 0 && <div className="fam"><b>Same pattern:</b> {fam.map((x) => `${x.shown.inf[0]} ${x.shown.past[0]} ${x.shown.pp[0]}`).join(' · ')}</div>}
+            <p>{good ? <>Next time in <b>{st ? fmtDue(st.due) : 'soon'}</b>.</> : 'It comes back in a few tasks until you write it correctly.'}</p>
             {nearMiss && !over && (
-              <button className="btn ghost sm" style={{ paddingLeft: 0 }} onClick={() => { setOver(true); onOverride({ ok: true, grade: 3, secs: (Date.now() - t0.current) / 1000 }) }}>Tipkarska napaka, štej kot pravilno</button>
+              <button className="btn ghost sm" style={{ paddingLeft: 0 }} onClick={() => { setOver(true); onOverride({ ok: true, grade: 3, secs: (Date.now() - t0.current) / 1000 }) }}>Typo, count it as correct</button>
             )}
           </motion.div>
         )}
@@ -617,29 +617,29 @@ function VerbQ({ entry, onAnswer, onOverride, onNext }: { entry: Entry; onAnswer
       <div className="s-actions">
         {!res ? (
           <>
-            {!brutal && <button className="btn sm" onClick={hint}><Lightbulb />Namig</button>}
-            <button className="btn sm" onClick={() => submit(true)}>Ne vem</button>
-            <button className="btn sm primary" onClick={() => submit()}>Preveri</button>
+            {!brutal && <button className="btn sm" onClick={hint}><Lightbulb />Hint</button>}
+            <button className="btn sm" onClick={() => submit(true)}>I don't know</button>
+            <button className="btn sm primary" onClick={() => submit()}>Check</button>
           </>
         ) : (
           <>
-            {canSpeak() && <button className="btn sm" style={{ flex: '0 0 auto' }} onClick={() => say()} aria-label="Izgovori"><Volume2 /></button>}
-            <button ref={nextBtn} className="btn sm primary" onClick={onNext}>Naprej<ArrowRight /></button>
+            {canSpeak() && <button className="btn sm" style={{ flex: '0 0 auto' }} onClick={() => say()} aria-label="Pronounce"><Volume2 /></button>}
+            <button ref={nextBtn} className="btn sm primary" onClick={onNext}>Next<ArrowRight /></button>
           </>
         )}
       </div>
-      {!res && <div className="kbd">Enter premakne naprej in preveri</div>}
+      {!res && <div className="kbd">Enter moves on and checks</div>}
     </div>
   )
 }
 
-/* ───────────────────────── glagol v stavku ───────────────────────── */
+/* ───────────────────────── verb in a sentence ───────────────────────── */
 function ContextQ({ entry, onAnswer, onOverride, onNext }: { entry: Entry; onAnswer: (r: Result) => void; onOverride: (r: Result) => void; onNext: () => void }) {
   const item = entry.item as Extract<QItem, { kind: 'verb' }>
   const v = item.verb
   const s = useMemo(() => sentFor(entry.uid, v.id), [entry.uid, v.id])
   const [, form, text, sl] = s
-  // glas za stavek se pripravi že med reševanjem, zato po odgovoru zaigra brez čakanja
+  // the voice for the sentence is prepared while you solve, so it plays without waiting after you answer
   useEffect(() => { if (getState().settings.speech) void prepare(text.replace('___', v.shown[form][0])) }, [text, form, v])
   useReadTask(text, v.id)
   const [val, setVal] = useState('')
@@ -667,40 +667,40 @@ function ContextQ({ entry, onAnswer, onOverride, onNext }: { entry: Entry; onAns
   const st = getState().items['v:' + v.id]
   return (
     <div className="qcard glass">
-      <div className="qmeta"><span className="qmeta-l"><Tag entry={entry} /><TaskSay q={text} hint={v.id} /></span><span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>V stavku{brutal && res === null && <TimerRing left={left} total={14} />}</span></div>
+      <div className="qmeta"><span className="qmeta-l"><Tag entry={entry} /><TaskSay q={text} hint={v.id} /></span><span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>In a sentence{brutal && res === null && <TimerRing left={left} total={14} />}</span></div>
       <div className="qword sentence" lang="en" style={{ marginTop: 22 }}>
         {a}
         <Kinetic ref={inp} inline value={val} onChange={setVal} onEnter={() => (res === null ? submit() : onNext())}
-          status={res === null ? 'idle' : good ? 'ok' : 'bad'} correct={v.shown[form].join('/')} ariaLabel={`${form === 'past' ? 'Past simple' : 'Past participle'} glagola ${v.id}`} />
+          status={res === null ? 'idle' : good ? 'ok' : 'bad'} correct={v.shown[form].join('/')} ariaLabel={`${form === 'past' ? 'Past simple' : 'Past participle'} of the verb ${v.id}`} />
         {b}
       </div>
       <div className="qhint" style={{ marginTop: 10 }}>({v.id}) · {sl}</div>
       <AnimatePresence>
         {res !== null && (
           <motion.div className={'result ' + (good ? 'good' : 'bad')} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ ...spring, delay: 0.12 }}>
-            <h3>{good ? 'Pravilno' : 'Še ne'}<Listen text={text.replace('___', v.shown[form][0])} /></h3>
+            <h3>{good ? 'Correct' : 'Not yet'}<Listen text={text.replace('___', v.shown[form][0])} /></h3>
             <div className="forms" lang="en">{v.shown.inf[0]}<span>·</span>{v.shown.past.join('/')}<span>·</span>{v.shown.pp.join('/')}</div>
-            <p>Tu je potreben {form === 'past' ? 'past simple' : 'past participle'}{form === 'pp' ? ' (za have/has/had ali trpnik)' : ''}.</p>
-            {good && st && <p>Naslednjič čez <b>{fmtDue(st.due)}</b>.</p>}
-            {near && !over && <button className="btn ghost sm" style={{ paddingLeft: 0 }} onClick={() => { setOver(true); onOverride({ ok: true, grade: 3, secs: 5 }) }}>Tipkarska napaka, štej kot pravilno</button>}
+            <p>Here you need {form === 'past' ? 'past simple' : 'past participle'}{form === 'pp' ? ' (after have/has/had or in the passive)' : ''}.</p>
+            {good && st && <p>Next time in <b>{fmtDue(st.due)}</b>.</p>}
+            {near && !over && <button className="btn ghost sm" style={{ paddingLeft: 0 }} onClick={() => { setOver(true); onOverride({ ok: true, grade: 3, secs: 5 }) }}>Typo, count it as correct</button>}
           </motion.div>
         )}
       </AnimatePresence>
       <div className="s-actions">
         {res === null ? (
           <>
-            <button className="btn sm" onClick={() => submit(true)}>Ne vem</button>
-            <button className="btn sm primary" onClick={() => submit()}>Preveri</button>
+            <button className="btn sm" onClick={() => submit(true)}>I don't know</button>
+            <button className="btn sm primary" onClick={() => submit()}>Check</button>
           </>
         ) : (
-          <button ref={nextBtn} className="btn sm primary" onClick={onNext}>Naprej<ArrowRight /></button>
+          <button ref={nextBtn} className="btn sm primary" onClick={onNext}>Next<ArrowRight /></button>
         )}
       </div>
     </div>
   )
 }
 
-/* ───────────────────────── lov na napako ───────────────────────── */
+/* ───────────────────────── spot the mistake ───────────────────────── */
 function HuntQ({ entry, onAnswer, onNext }: { entry: Entry; onAnswer: (r: Result) => void; onNext: () => void }) {
   const item = entry.item as Extract<QItem, { kind: 'verb' }>
   const v = item.verb
@@ -738,9 +738,9 @@ function HuntQ({ entry, onAnswer, onNext }: { entry: Entry; onAnswer: (r: Result
   })
   return (
     <div className="qcard glass">
-      <div className="qmeta"><Tag entry={entry} /><span>Lov na napako</span></div>
+      <div className="qmeta"><Tag entry={entry} /><span>Spot the mistake</span></div>
       <div className="qword" lang="sl">{v.slo}</div>
-      <div className="qhint">Samo ena trojica je pravilna. Ostale so pasti.</div>
+      <div className="qhint">Only one set is correct. The others are traps.</div>
       <div className="choices">
         {opts.map((o, i) => (
           <motion.button key={i} className={'choice' + (pick === null ? '' : o.ok ? ' ok' : i === pick ? ' bad' : ' dim')} onClick={() => choose(i)}
@@ -753,28 +753,28 @@ function HuntQ({ entry, onAnswer, onNext }: { entry: Entry; onAnswer: (r: Result
       {pick !== null && (
         <>
           <motion.div className={'result ' + (opts[pick].ok ? 'good' : 'bad')} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={spring}>
-            <h3>{opts[pick].ok ? 'Ujel si pravo' : 'Ujel si se v past'}</h3>
-            <p>Vzorec: {TYPE_TXT[v.type]}.{v.note ? ` ${v.note}` : ''}</p>
+            <h3>{opts[pick].ok ? 'You caught the right one' : 'You fell into the trap'}</h3>
+            <p>Pattern: {TYPE_TXT[v.type]}.{v.note ? ` ${v.note}` : ''}</p>
           </motion.div>
-          <div className="s-actions"><button ref={nextBtn} className="btn sm primary" onClick={onNext}>Naprej<ArrowRight /></button></div>
+          <div className="s-actions"><button ref={nextBtn} className="btn sm primary" onClick={onNext}>Next<ArrowRight /></button></div>
         </>
       )}
     </div>
   )
 }
 
-/* ───────────────────────── slovnica: vtipkaj ───────────────────────── */
+/* ───────────────────────── grammar: type it ───────────────────────── */
 const JEV_KIND: Record<string, string> = {
-  typo: 'Tipkarska napaka: prava beseda, napačno črkovanje',
-  form: 'Prava beseda, napačna oblika',
-  near: 'Blizu po pomenu, a ne ta beseda',
-  wrong: 'Druga beseda z drugim pomenom',
-  other: 'To ni odgovor na nalogo',
+  typo: 'Typo: the right word, wrong spelling',
+  form: 'The right word, the wrong form',
+  near: 'Close in meaning, but not this word',
+  wrong: 'A different word with a different meaning',
+  other: 'This is not an answer to the task',
 }
-/** Kratka oznaka, kaj je Jev ugotovil o odgovoru. */
+/** Short label for what Jev found about the answer. */
 function JevChip({ d }: { d: Diag | 'load' }) {
-  if (d === 'load') return <div className="jev-chip load"><Sparkles />Jev preverja odgovor …</div>
-  if (d.accept >= 0.85) return <motion.div className="jev-chip ok" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}><Sparkles />Jev: tvoj odgovor je sprejemljiva različica, štejem kot pravilno</motion.div>
+  if (d === 'load') return <div className="jev-chip load"><Sparkles />Jev is checking your answer …</div>
+  if (d.accept >= 0.85) return <motion.div className="jev-chip ok" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}><Sparkles />Jev: your answer is an acceptable variant, counted as correct</motion.div>
   return <motion.div className="jev-chip" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}><Sparkles />{JEV_KIND[d.kind] || JEV_KIND.wrong}</motion.div>
 }
 
@@ -783,7 +783,7 @@ function TypeQ({ entry, card, onAnswer, onOverride, onNext }: { entry: Entry; ca
   const [val, setVal] = useState('')
   const [res, setRes] = useState<null | boolean>(null)
   const [over, setOver] = useState(false)
-  // postopni namig: najprej prva črka, nato polovica besede; namig zniža oceno, a odgovor še vedno šteje
+  // gradual hint: first the first letter, then half the word; a hint lowers the rating, but the answer still counts
   const [hintN, setHintN] = useState(0)
   const [jd, setJd] = useState<Diag | 'load' | null>(null)
   const hintTxt = hintN ? card.a[0].slice(0, Math.max(1, Math.ceil(card.a[0].length * (hintN === 1 ? 0.2 : 0.5)))) + '…' : ''
@@ -803,7 +803,7 @@ function TypeQ({ entry, card, onAnswer, onOverride, onNext }: { entry: Entry; ca
     const secs = (Date.now() - t0.current) / 1000
     onAnswer({ ok, grade: gradeFor(ok, item.key, secs, 1.4, hintN), secs })
     setTimeout(() => nextBtn.current?.focus({ preventScroll: true }), 60)
-    // Jev v ~0,2 s presodi napačen odgovor: sprejemljiva različica (štej kot pravilno) ali vrsta napake
+    // in ~0.2 s Jev judges a wrong answer: an acceptable variant (count it as correct) or the type of mistake
     if (!ok && !gaveUp && val.trim()) {
       setJd('load')
       void diagnose(card.q, card.a, val.trim()).then((d) => {
@@ -818,40 +818,40 @@ function TypeQ({ entry, card, onAnswer, onOverride, onNext }: { entry: Entry; ca
     <div className="qcard glass">
       <div className="qmeta"><span className="qmeta-l"><Tag entry={entry} /><TaskSay q={card.q} /></span><span>{item.deck.short}</span></div>
       <div className="qword sentence" lang="en" style={{ marginTop: 22 }}>{card.q}</div>
-      {card.hint && <div className="qhint" style={{ marginTop: 8 }}>Namig: <span lang="en">{card.hint}</span></div>}
+      {card.hint && <div className="qhint" style={{ marginTop: 8 }}>Hint: <span lang="en">{card.hint}</span></div>}
       {res === null && card.a[0].length > 2 && (
         <div className="hintline">
-          <button className="btn ghost sm" disabled={hintN >= 2} onClick={() => { setHintN((h) => h + 1); inp.current?.focus() }}><Lightbulb />{hintN === 0 ? 'Namig' : hintN === 1 ? 'Še en namig' : 'Ni več namigov'}</button>
+          <button className="btn ghost sm" disabled={hintN >= 2} onClick={() => { setHintN((h) => h + 1); inp.current?.focus() }}><Lightbulb />{hintN === 0 ? 'Hint' : hintN === 1 ? 'Another hint' : 'No more hints'}</button>
           {hintTxt && <motion.span key={hintN} className="hintw" lang="en" initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }}>{hintTxt}</motion.span>}
         </div>
       )}
       <div className="fields">
-        <Kinetic ref={inp} value={val} onChange={setVal} onEnter={() => (res === null ? submit() : onNext())} status={res === null ? 'idle' : good ? 'ok' : 'bad'} correct={best} ariaLabel="Odgovor" />
+        <Kinetic ref={inp} value={val} onChange={setVal} onEnter={() => (res === null ? submit() : onNext())} status={res === null ? 'idle' : good ? 'ok' : 'bad'} correct={best} ariaLabel="Answer" />
       </div>
       <AnimatePresence>
         {res !== null && (
           <motion.div className={'result ' + (good ? 'good' : 'bad')} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ ...spring, delay: 0.12 }}>
-            <h3>{good ? 'Pravilno' : 'Še ne'}{spoken && <Listen text={spoken} />}</h3>
+            <h3>{good ? 'Correct' : 'Not yet'}{spoken && <Listen text={spoken} />}</h3>
             {jd && <JevChip d={jd} />}
             {card.note && <p>{card.note}</p>}
-            {card.a.length > 1 && <p>Sprejeto: {card.a.join(', ')}</p>}
-            {res === false && !over && val.trim() && (lev(norm(val), norm(best)) === 1 || (jd && jd !== 'load' && jd.kind === 'typo')) && <button className="btn ghost sm" style={{ paddingLeft: 0 }} onClick={() => { setOver(true); onOverride({ ok: true, grade: 3, secs: 5 }) }}>Tipkarska napaka, štej kot pravilno</button>}
+            {card.a.length > 1 && <p>Accepted: {card.a.join(', ')}</p>}
+            {res === false && !over && val.trim() && (lev(norm(val), norm(best)) === 1 || (jd && jd !== 'load' && jd.kind === 'typo')) && <button className="btn ghost sm" style={{ paddingLeft: 0 }} onClick={() => { setOver(true); onOverride({ ok: true, grade: 3, secs: 5 }) }}>Typo, count it as correct</button>}
             {!good && <Why task={card.q} given={val} correct={card.a.join(' / ')} ctx={card.note} />}
           </motion.div>
         )}
       </AnimatePresence>
       <div className="s-actions">
         {res === null ? (
-          <><button className="btn sm" onClick={() => submit(true)}>Ne vem</button><button className="btn sm primary" onClick={() => submit()}>Preveri</button></>
+          <><button className="btn sm" onClick={() => submit(true)}>I don't know</button><button className="btn sm primary" onClick={() => submit()}>Check</button></>
         ) : (
-          <button ref={nextBtn} className="btn sm primary" onClick={onNext}>Naprej<ArrowRight /></button>
+          <button ref={nextBtn} className="btn sm primary" onClick={onNext}>Next<ArrowRight /></button>
         )}
       </div>
     </div>
   )
 }
 
-/* ───────────────────────── slovnica: izbira ───────────────────────── */
+/* ───────────────────────── grammar: choice ───────────────────────── */
 function ChoiceQ({ entry, card, onAnswer, onNext }: { entry: Entry; card: ChoiceCard; onAnswer: (r: Result) => void; onNext: () => void }) {
   const item = entry.item as Extract<QItem, { kind: 'card' }>
   const order = useMemo(() => {
@@ -905,18 +905,18 @@ function ChoiceQ({ entry, card, onAnswer, onNext }: { entry: Entry; card: Choice
       {pick !== null && (
         <>
           <motion.div className={'result ' + (pick === card.correct ? 'good' : 'bad')} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={spring}>
-            <h3>{pick === card.correct ? 'Pravilno' : 'Še ne'}{spoken && <Listen text={spoken} />}</h3>
+            <h3>{pick === card.correct ? 'Correct' : 'Not yet'}{spoken && <Listen text={spoken} />}</h3>
             {card.note && <p>{card.note}</p>}
-            {pick !== card.correct && <Why task={`${card.q} (možnosti: ${card.options.join(' | ')})`} given={card.options[pick]} correct={card.options[card.correct]} ctx={card.note} />}
+            {pick !== card.correct && <Why task={`${card.q} (options: ${card.options.join(' | ')})`} given={card.options[pick]} correct={card.options[card.correct]} ctx={card.note} />}
           </motion.div>
-          <div className="s-actions"><button ref={nextBtn} className="btn sm primary" onClick={onNext}>Naprej<ArrowRight /></button></div>
+          <div className="s-actions"><button ref={nextBtn} className="btn sm primary" onClick={onNext}>Next<ArrowRight /></button></div>
         </>
       )}
     </div>
   )
 }
 
-/* ───────────────────────── povzetek ───────────────────────── */
+/* ───────────────────────── summary ───────────────────────── */
 function CountUp({ to, dur = 1.1 }: { to: number; dur?: number }) {
   const [n, setN] = useState(0)
   useEffect(() => {
@@ -941,34 +941,34 @@ function Summary({ title, stats, onClose }: { title: string; stats: { first: Map
   const [redo, setRedo] = useState<QItem[] | null>(null)
   const st = getState()
   const delta = rating(st.profile.theta) - rating(stats.theta0)
-  if (redo) return <Session items={redo} title="Napake" onClose={onClose} />
+  if (redo) return <Session items={redo} title="Mistakes" onClose={onClose} />
   return (
     <motion.div className="qcard glass" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.9, ease: 'easeOut' as const }}>
       <div className="qmeta"><span className="k place">{title}</span><span>{mins} min</span></div>
-      <div className="big num"><CountUp to={acc} /><small>% prvič pravilno</small></div>
-      {title === 'Preverjanje' && (
+      <div className="big num"><CountUp to={acc} /><small>% right first time</small></div>
+      {title === 'Check' && (
         <motion.div className={'mock-grade g' + gradeOf(acc)} initial={{ scale: 0.6, opacity: 0, rotate: -8 }} animate={{ scale: 1, opacity: 1, rotate: 0 }} transition={{ type: 'spring', stiffness: 300, damping: 16, delay: 0.8 }}>
-          <b>{gradeOf(acc)}</b><span>ocena ({firsts.filter(Boolean).length}/{firsts.length} točk)<br /><small>meje 50, 63, 76, 89 %</small></span>
+          <b>{gradeOf(acc)}</b><span>grade ({firsts.filter(Boolean).length}/{firsts.length} points)<br /><small>thresholds 50, 63, 76, 89 %</small></span>
         </motion.div>
       )}
       <div className="stats3">
         <div><b className="num">{rating(st.profile.theta)}</b><span>rating <span className={'delta ' + (delta >= 0 ? 'up' : 'down')}>{delta >= 0 ? '+' : ''}{delta}</span></span></div>
-        <div><b className="num">+{stats.xp || 0}</b><span>XP v seji</span></div>
-        <div><b className="num">×{stats.best}</b><span>najdaljši niz</span></div>
+        <div><b className="num">+{stats.xp || 0}</b><span>XP this session</span></div>
+        <div><b className="num">×{stats.best}</b><span>longest streak</span></div>
       </div>
-      {stats.placement && <p className="lead">Uvrstitev končana. Lahke glagole, ki jih že znaš, algoritem odloži za dolgo, novi pa bodo na meji tvojega znanja.</p>}
+      {stats.placement && <p className="lead">Placement done. Easy verbs you already know are put away for a long time, and new ones will sit at the edge of your knowledge.</p>}
       {missed.length > 0 ? (
         <>
-          <div className="section-title" style={{ marginTop: 24 }}><span className="h3">Napake</span><span className="small muted">{missed.length}</span></div>
+          <div className="section-title" style={{ marginTop: 24 }}><span className="h3">Mistakes</span><span className="small muted">{missed.length}</span></div>
           <div className="list glass" style={{ borderRadius: 20 }}>
             {missed.slice(0, 12).map((k) => { const it = keyLabel(k); return <div key={k} className="li"><div className="li-main"><span className="li-t">{it.t}</span><span className="li-s">{it.s}</span></div></div> })}
           </div>
-          <button className="btn w primary" style={{ marginTop: 14 }} onClick={() => setRedo(missed.map((k) => itemFromKey(k, st.items, st.settings)).filter(Boolean) as QItem[])}><RotateCcw />Še enkrat samo napake</button>
+          <button className="btn w primary" style={{ marginTop: 14 }} onClick={() => setRedo(missed.map((k) => itemFromKey(k, st.items, st.settings)).filter(Boolean) as QItem[])}><RotateCcw />Once more, only the mistakes</button>
         </>
       ) : !stats.placement ? (
-        <p className="lead">Brez napak. Te glagole boš videl šele tik preden bi jih pozabil.</p>
+        <p className="lead">No mistakes. You will only see these verbs again just before you would forget them.</p>
       ) : null}
-      <button className="btn w" style={{ marginTop: 10 }} onClick={onClose}>Končaj</button>
+      <button className="btn w" style={{ marginTop: 10 }} onClick={onClose}>Finish</button>
     </motion.div>
   )
 }
@@ -982,7 +982,7 @@ function keyLabel(k: string): { t: string; s: string } {
   }
   const [d, c] = k.slice(2).split('/')
   const card = DECK_BY_ID[d]?.cards.find((x) => x.id === c)
-  const a = card ? (card.kind === 'type' ? card.a[0] : card.kind === 'explain' || card.kind === 'write' ? 'pisna naloga' : card.options[card.correct]) : ''
+  const a = card ? (card.kind === 'type' ? card.a[0] : card.kind === 'explain' || card.kind === 'write' ? 'written task' : card.options[card.correct]) : ''
   return { t: card?.q || k, s: a }
 }
 

@@ -1,10 +1,10 @@
-// Računalniški tekmeci: na lestvici in v areni. Vse je deterministično (isto seme = enak rezultat na vseh napravah),
-// zato vsi uporabniki vidijo iste tekmece z istimi točkami, brez strežnika in brez lažnih računov v bazi.
+// Computer opponents: on the leaderboard and in the arena. Everything is deterministic (same seed = same result on all devices),
+// so all users see the same opponents with the same points, without a server and without fake accounts in a database.
 import { levelOf, rating } from './adaptive'
 import { VERBS } from './verbs'
 import type { PubStats, Row } from './league'
 
-/** Hiter psevdonaključni generator s semenom (mulberry32). */
+/** Fast seeded pseudo random generator (mulberry32). */
 export function rng(seed: number) {
   let a = seed >>> 0
   return () => {
@@ -23,7 +23,7 @@ export function hash(s: string) {
 export const BOT_NAMES = ['Lana', 'Maks', 'Ema', 'Tilen', 'Zala', 'Jaka', 'Neža', 'Vid', 'Tjaša', 'Luka', 'Ajda', 'Gal', 'Pia', 'Rok', 'Lea', 'Matic', 'Sara', 'Nejc', 'Kaja', 'Žan', 'Iza', 'Jure', 'Hana', 'Bor', 'Manca', 'Aljaž', 'Tara', 'Lovro', 'Klara', 'Urban', 'Brina', 'Domen']
 export const isBot = (id: string) => id.startsWith('bot:')
 
-/* ───────── lestvica ───────── */
+/* ───────── leaderboard ───────── */
 const LEAGUE_BOTS = 6
 const weekNum = (week: string) => { const [y, w] = week.split('-W').map(Number); return y * 53 + w }
 
@@ -35,18 +35,18 @@ function botProfile(i: number): BotProfile {
     id: 'bot:' + i,
     name: order[i % order.length],
     theta: -0.6 + r() * 1.7,
-    weekly: 1500 + r() * 3000, // povprečen učenec: 1,5k do 4,5k XP na teden
-    activity: 0.5 + r() * 0.42, // verjetnost, da na dan vadi
-    hour: 13 + r() * 8, // ura začetka vadbe
+    weekly: 1500 + r() * 3000, // average learner: 1.5k to 4.5k XP per week
+    activity: 0.5 + r() * 0.42, // probability of practising on a given day
+    hour: 13 + r() * 8, // hour when practice starts
     k0: 8 + Math.floor(r() * 40),
     kRate: 3 + r() * 9,
     streak0: 1 + Math.floor(r() * 9),
     acc: 0.7 + r() * 0.22,
-    since: 3 + Math.floor(r() * 6), // tednov nazaj
+    since: 3 + Math.floor(r() * 6), // weeks back
   }
 }
 
-/** XP bota za dan d (0 = ponedeljek) v tednu; za tekoči dan samo del, ki je že »odvadil«. */
+/** A bot's XP for day d (0 = Monday) of the week; for the current day only the part it has already “practised”. */
 function dayXp(b: BotProfile, week: string, d: number, todayIdx: number, hourNow: number): number {
   if (d > todayIdx) return 0
   const r = rng(hash(`${b.id}|${week}|${d}`))
@@ -69,7 +69,7 @@ const prevWeek = (week: string, k: number) => {
   return `${w === 53 ? y - 1 : y}-W${String(w).padStart(2, '0')}`
 }
 
-/** Tekmeci za tekoči teden, z oblikovano statistiko, ki je videti kot pri resničnem učencu. */
+/** Opponents for the current week, with shaped statistics that look like a real learner's. */
 export function leagueBots(week: string, now = new Date()): Row[] {
   return Array.from({ length: LEAGUE_BOTS }, (_, i) => {
     const b = botProfile(i)
@@ -94,7 +94,7 @@ export function leagueBots(week: string, now = new Date()): Row[] {
   })
 }
 
-/** Zadnjih 8 tednov za profil tekmeca. */
+/** The last 8 weeks for an opponent's profile. */
 export function botWeeks(id: string, week: string): { week: string; xp: number }[] {
   const b = botProfile(Number(id.split(':')[1]) || 0)
   return Array.from({ length: Math.min(8, b.since + 1) }, (_, k) => {

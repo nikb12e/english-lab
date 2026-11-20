@@ -1,5 +1,5 @@
-// Tedenska lestvica: vsak prijavljen uporabnik ima eno vrstico na teden (ISO teden), XP se sešteje iz dnevnega dnevnika.
-// XP nagrajuje učenje, ne mletja: pravilni zapadli in novi glagoli prinesejo največ, ponavljanje že znanega malo.
+// Weekly leaderboard: every signed in user has one row per week (ISO week), XP is summed from the daily log.
+// XP rewards learning, not grinding: correct due and new verbs give the most, repeating what you already know gives little.
 import { supabase } from './supabase'
 import { getState, type Profile } from './store'
 import { VERBS } from './verbs'
@@ -7,7 +7,7 @@ import { maturity } from './fsrs'
 import { levelOf, rating } from './adaptive'
 import { leagueBots, botWeeks, isBot } from './bots'
 
-/** ISO teden v lokalnem času, npr. 2026-W46. */
+/** ISO week in local time, e.g. 2026-W46. */
 export function isoWeek(d = new Date()) {
   const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()))
   const day = t.getUTCDay() || 7
@@ -19,7 +19,7 @@ export function isoWeek(d = new Date()) {
 
 const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 
-/** Dnevi tekočega tedna (pon … ned) v obliki YYYY-MM-DD. */
+/** Days of the current week (Mon … Sun) as YYYY-MM-DD. */
 export function weekDays(d = new Date()) {
   const mon = new Date(d)
   mon.setDate(d.getDate() - ((d.getDay() + 6) % 7))
@@ -29,7 +29,7 @@ export function weekDays(d = new Date()) {
 export const weekXp = (p: Profile) => weekDays().reduce((a, k) => a + (p.days[k]?.x || 0), 0)
 export const todayXp = (p: Profile) => p.days[ymd(new Date())]?.x || 0
 
-/** Do sekunde, ko se teden konča (nedelja 24:00). */
+/** Until the second the week ends (Sunday 24:00). */
 export function weekEndsIn(now = new Date()) {
   const end = new Date(now)
   end.setDate(now.getDate() + (7 - ((now.getDay() + 6) % 7)))
@@ -37,30 +37,30 @@ export function weekEndsIn(now = new Date()) {
   return end.getTime() - now.getTime()
 }
 
-/** XP za en odgovor. */
+/** XP for one answer. */
 export function xpFor(o: { ok: boolean; placement: boolean; firstTime: boolean; wasDue: boolean; wasNew: boolean; becameKnown: boolean; kind: string }) {
   if (o.placement) return o.ok ? 5 : 1
   let x: number
-  if (!o.firstTime) x = o.ok ? 4 : 1 // ponovitev ali potrditev po napaki
-  else if (!o.ok) x = 2 // trud šteje, a malo
-  else x = o.wasNew || o.wasDue ? 10 : 3 // znanega, ki še ni na vrsti, se ne splača mleti
+  if (!o.firstTime) x = o.ok ? 4 : 1 // a repeat or confirmation after a mistake
+  else if (!o.ok) x = 2 // effort counts, but only a little
+  else x = o.wasNew || o.wasDue ? 10 : 3 // grinding something known that is not due yet is not worth it
   if (o.becameKnown) x += 5
   return x
 }
 
-// pogosta slovenska (in nekaj tujih) imena: e-pošta, ki se začne z imenom brez ločila (npr. »janeznovak«), da pravo ime
+// common Slovenian (and some foreign) first names: an email that starts with a name without a separator (e.g. “janeznovak”) gives the real name
 const NAMES = 'nik,nika,niko,nikolaj,luka,jan,žan,zan,tim,tine,tilen,tadej,tomaž,tomaz,matic,matija,matej,mark,marko,miha,mihael,jure,jaka,jakob,jernej,jošt,jost,gal,gašper,gasper,anže,anze,aljaž,aljaz,blaž,blaz,david,domen,erik,filip,gregor,jon,jost,klemen,kristjan,lovro,maks,martin,mitja,nejc,oskar,peter,primož,primoz,rok,rene,sašo,saso,simon,sven,urban,urh,val,vid,vito,žiga,ziga,ažbe,azbe,adam,alen,andraž,andraz,andrej,bor,boris,dejan,denis,enej,ian,igor,jaša,jasa,kevin,leon,lan,luka,mai,mark,maj,nace,nal,nejc,patrik,svit,teo,timotej,tjaš,tjas,lara,lea,lana,eva,ema,zala,zoja,ana,anja,tjaša,tjasa,maja,mia,nina,neža,neza,nuša,nusa,pia,sara,sofia,sofija,špela,spela,tara,tina,tia,urša,ursa,vita,živa,ziva,julija,klara,lucija,manca,meta,nika,petra,katja,katarina,karin,kaja,hana,iza,ajda,alja,brina,gaja,ines,inja,jana,jera,kiara,laura,lina,lena,mojca,naja,ota,polona,rebeka,saša,sasa,taja,teja,ula,vesna,zarja,žana,zana'.split(',').sort((a, b) => b.length - a.length)
 const JUNK = new Set(['info', 'mail', 'email', 'admin', 'test', 'user', 'official', 'real', 'the', 'its', 'me', 'my', 'yt', 'youtube', 'youtub', 'gaming', 'game', 'pro', 'xd', 'ai', 'dev', 'contact', 'hello', 'hi', 'dijak', 'ucenec', 'student', 'mr', 'mrs', 'ms', 'noreply', 'office', 'support', 'account', 'school', 'sola'])
 const DIAC: Record<string, string> = { ziga: 'žiga', zan: 'žan', anze: 'anže', aljaz: 'aljaž', blaz: 'blaž', gasper: 'gašper', tomaz: 'tomaž', primoz: 'primož', saso: 'sašo', andraz: 'andraž', jasa: 'jaša', tjas: 'tjaš', tjasa: 'tjaša', neza: 'neža', nusa: 'nuša', spela: 'špela', ursa: 'urša', ziva: 'živa', sasa: 'saša', zana: 'žana', azbe: 'ažbe', jost: 'jošt' }
 const cap = (w0: string) => { const w = DIAC[w0] || w0; return w.charAt(0).toUpperCase() + w.slice(1) }
 
-/** Ime iz e-poštnega naslova: »ime.priimek@…« → Ime; »janeznovak@…« → Janez (če se začne z znanim imenom); sicer prvi smiseln del. */
+/** Name from an email address: “first.last@…” → First; “janeznovak@…” → Janez (if it starts with a known name); otherwise the first meaningful part. */
 export function nameFromEmail(email?: string | null): string | null {
   if (!email) return null
   const local = email.split('@')[0].toLowerCase().replace(/\+.*$/, '')
   let parts = local.split(/[._\-\d]+/).filter((p) => p.length >= 2 && /^[a-zčšž]+$/.test(p) && !JUNK.has(p))
   if (!parts.length) {
-    // vse je bilo »smeti«: vzemi najdaljši smiseln del (vsaj 3 črke); enako pravilo ima baza (name_from_email)
+    // everything was “junk”: take the longest meaningful part (at least 3 letters); the database uses the same rule (name_from_email)
     const best = local.split(/[._\-\d+]+/).filter((p) => p.length >= 3 && /^[a-zčšž]+$/.test(p) && !['info', 'mail', 'admin', 'test', 'user', 'noreply', 'office', 'support', 'contact'].includes(p)).sort((a, b) => b.length - a.length)[0]
     if (!best) return null
     parts = [best]
@@ -81,10 +81,10 @@ export function defaultName() {
   if (full.trim()) return full.trim().split(/\s+/)[0].slice(0, 24)
   const fromMail = nameFromEmail(s?.user.email)
   if (fromMail) return fromMail.slice(0, 24)
-  return 'Učenec ' + (s?.user.id || '0000').slice(0, 4).toUpperCase()
+  return 'Learner ' + (s?.user.id || '0000').slice(0, 4).toUpperCase()
 }
 
-/** Javna statistika za profil na lestvici (brez e-pošte in drugih osebnih podatkov). */
+/** Public stats for a leaderboard profile (no email or other personal data). */
 export interface PubStats {
   lvl: string; rt: number; known: number; cards: number; total: number; correct: number; min: number
   best: number; sprint: number; acc14: number | null; n14: number; days: number[]; active30: number; since: string | null
@@ -117,7 +117,7 @@ export function buildStats(): PubStats {
 
 let pushTimer = 0
 let lastPushed = ''
-/** Pošlje svoj tedenski XP na lestvico (z zamikom, da ne kliče ob vsakem odgovoru). */
+/** Sends your weekly XP to the leaderboard (with a delay so it does not call on every answer). */
 export function scheduleLeaguePush(delay = 4000) {
   clearTimeout(pushTimer)
   pushTimer = window.setTimeout(() => { void pushLeague() }, delay)
@@ -142,14 +142,14 @@ export async function pushLeague() {
 export async function fetchLeague(): Promise<Row[] | null> {
   const { data, error } = await supabase.from('league').select('user_id,name,xp,known,streak,stats').eq('week', isoWeek()).order('xp', { ascending: false }).limit(50)
   if (error) return null
-  // tekmeci dopolnijo lestvico, da je pestra tudi, ko vadi malo ljudi (imena se ne podvajajo z resničnimi)
+  // opponents fill the leaderboard so it stays lively even when few people practise (names do not clash with real ones)
   const real = data as Row[]
   const taken = new Set(real.map((r) => r.name.toLowerCase()))
   const bots = leagueBots(isoWeek()).filter((b) => !taken.has(b.name.toLowerCase()))
   return [...real, ...bots].sort((a, b) => b.xp - a.xp)
 }
 
-/** Tedenski XP člana za zadnjih 8 tednov (za graf na profilu). */
+/** A member's weekly XP for the last 8 weeks (for the chart on the profile). */
 export async function fetchWeeks(userId: string): Promise<{ week: string; xp: number }[]> {
   if (isBot(userId)) return botWeeks(userId, isoWeek())
   const { data } = await supabase.from('league').select('week,xp').eq('user_id', userId).order('week', { ascending: false }).limit(8)

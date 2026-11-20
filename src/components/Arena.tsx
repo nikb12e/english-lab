@@ -1,4 +1,4 @@
-// Arena v živo (kot Kahoot, samo za angleščino): 10 s čakalnice, 8 vprašanj po 12 s, točke za pravilnost in hitrost.
+// Live arena (like Kahoot, just for English): 10 s lobby, 8 questions of 12 s each, points for accuracy and speed.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { X, Trophy, Users, Zap, RotateCcw, Check, Volume2, Send } from 'lucide-react'
@@ -46,7 +46,7 @@ type Ans = { c: number; ms: number }
 
 export function Arena({ onClose }: { onClose: () => void }) {
   const st = getState()
-  const me = useMemo<Player>(() => ({ id: st.session?.user.id || 'guest-' + Math.random().toString(36).slice(2, 8), name: st.session ? defaultName() : 'Gost', theta: st.profile.theta || 0 }), [st.session, st.profile.theta])
+  const me = useMemo<Player>(() => ({ id: st.session?.user.id || 'guest-' + Math.random().toString(36).slice(2, 8), name: st.session ? defaultName() : 'Guest', theta: st.profile.theta || 0 }), [st.session, st.profile.theta])
   const [room, setRoom] = useState<{ slot: number; start: number } | null>(null)
   const [humans, setHumans] = useState<Player[]>([me])
   const [roster, setRoster] = useState<Player[] | null>(null)
@@ -59,7 +59,7 @@ export function Arena({ onClose }: { onClose: () => void }) {
   const awarded = useRef(false)
   const spoken = useRef(-1)
 
-  // pridruži se sobi
+  // join the room
   useEffect(() => {
     let alive = true
     void (async () => {
@@ -70,7 +70,7 @@ export function Arena({ onClose }: { onClose: () => void }) {
       const c = supabase.channel(`arena-${r.slot}`, { config: { presence: { key: me.id }, broadcast: { self: false } } })
       c.on('presence', { event: 'sync' }, () => {
         const ps = c.presenceState<{ name: string; theta: number }>()
-        const list: Player[] = Object.entries(ps).map(([id, v]) => ({ id, name: v[0]?.name || 'Igralec', theta: Number(v[0]?.theta) || 0 }))
+        const list: Player[] = Object.entries(ps).map(([id, v]) => ({ id, name: v[0]?.name || 'Player', theta: Number(v[0]?.theta) || 0 }))
         if (!list.some((p) => p.id === me.id)) list.push(me)
         setHumans(list.sort((a, b) => a.id.localeCompare(b.id)))
       })
@@ -90,18 +90,18 @@ export function Arena({ onClose }: { onClose: () => void }) {
   }, [me])
 
   const qs = useMemo(() => (room ? roomQuestions(room.slot) : []), [room])
-  // Jev za vsako vprašanje oceni težavnost in mamljive napačne odgovore; enako za vse naprave v sobi
+  // For each question Jev rates the difficulty and tempting wrong answers; the same for all devices in the room
   const [jv, setJv] = useState<JevRoom | null>(null)
   useEffect(() => { if (room && qs.length) void fetchJevRoom(room.slot, qs).then(setJv) }, [room, qs])
   const start = room?.start ?? Infinity
   const freezeAt = start - 600
 
-  // zamrzni zasedbo tik pred začetkom: ljudje + boti do polne sobe
+  // freeze the line up just before the start: people + bots until the room is full
   useEffect(() => {
     if (!room || roster || t < freezeAt) return
     const hs = humans.length ? humans : [me]
     setRoster([...hs, ...fillBots(room.slot, hs, adjust)])
-    setJvFrozen(jv) // odločitve Jev se zamrznejo ob začetku, da se tekmeci med igro ne spremenijo
+    setJvFrozen(jv) // Jev's decisions are frozen at the start so the opponents do not change during the game
   }, [t, room, roster, humans, me, adjust, freezeAt, jv])
 
   const players = roster || [...humans, ...(room ? fillBots(room.slot, humans, adjust) : [])]
@@ -115,7 +115,7 @@ export function Arena({ onClose }: { onClose: () => void }) {
     }
     return answers[`${p.id}|${i}`] || null
   }
-  // časovnica: vsak igralec ima svoj čas za vprašanje; ko so odgovorili vsi, gremo takoj naprej (enako na vseh napravah)
+  // timeline: each player has their own time per question; when everyone has answered we move on at once (the same on all devices)
   const slots = useMemo(() => {
     if (!room || !roster) return null
     return timeline(start, qs, (i) => {
@@ -135,7 +135,7 @@ export function Arena({ onClose }: { onClose: () => void }) {
   const cur = k >= 0 && k < N_Q && slots ? slots[k] : null
   const within = cur ? t - cur.start : 0
 
-  // točke: samo za že razkrita vprašanja
+  // points: only for questions already revealed
   const revealedUpTo = phase === 'end' ? N_Q - 1 : phase === 'reveal' ? k : k - 1
   const scores = useMemo(() => {
     const out = new Map<string, { score: number; last: number; correct: number; streak: number }>()
@@ -157,7 +157,7 @@ export function Arena({ onClose }: { onClose: () => void }) {
   const ranked = [...players].sort((a, b) => (scores.get(b.id)?.score || 0) - (scores.get(a.id)?.score || 0))
   const myPlace = ranked.findIndex((p) => p.id === me.id) + 1
 
-  // zvok ob razkritju in izgovorjava glagola
+  // sound on reveal and pronunciation of the verb
   useEffect(() => {
     if (phase !== 'reveal' || spoken.current === k) return
     spoken.current = k
@@ -165,7 +165,7 @@ export function Arena({ onClose }: { onClose: () => void }) {
     if (mine) { if (mine.c === qs[k].correct) sfx.ok(scores.get(me.id)?.streak || 0); else sfx.bad() }
     if (qs[k]?.vid && qs[k].kind !== 'listen' && getState().settings.speech) speakVerb(qs[k].vid!, qs[k].vid!)
   }, [phase, k, answers, me.id, qs, scores])
-  // poslušanje: glagol se predvaja takoj ob začetku vprašanja
+  // listening: the verb plays right when the question starts
   const played = useRef(-1)
   useEffect(() => {
     if (phase !== 'q' || played.current === k || qs[k]?.kind !== 'listen') return
@@ -173,7 +173,7 @@ export function Arena({ onClose }: { onClose: () => void }) {
     window.setTimeout(() => speakVerb(qs[k].vid!, qs[k].vid!), 250)
   }, [phase, k, qs])
 
-  // nagrada na koncu
+  // reward at the end
   useEffect(() => {
     if (phase !== 'end' || awarded.current || !roster) return
     awarded.current = true
@@ -203,7 +203,7 @@ export function Arena({ onClose }: { onClose: () => void }) {
   const myAns = q ? answers[`${me.id}|${k}`] : null
   const answeredN = q ? players.filter((p) => { const a = ansOf(p, k); return a && (p.bot ? a.ms <= within : true) }).length : 0
   const timeLeft = cur && phase === 'q' ? Math.max(0, Math.ceil((cur.end - t) / 1000)) : 0
-  // porazdelitev odgovorov po možnostih (kot Kahoot po vsakem vprašanju)
+  // distribution of answers across the options (like Kahoot after each question)
   const dist = q && phase === 'reveal' ? q.options.map((_, i) => players.filter((p) => ansOf(p, k)?.c === i).length) : []
   const lobbyLeft = Math.max(0, Math.ceil((start - t) / 1000))
   const lobbyFrac = room ? Math.max(0, Math.min(1, 1 - (start - t) / LOBBY_MS)) : 0
@@ -214,36 +214,36 @@ export function Arena({ onClose }: { onClose: () => void }) {
     <motion.div className="session arena" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }}>
       <div className="s-inner">
         <div className="s-top">
-          <button className="iconbtn" onClick={onClose} aria-label="Zapri"><X /></button>
+          <button className="iconbtn" onClick={onClose} aria-label="Close"><X /></button>
           {(phase === 'q' || phase === 'reveal') && q && <div className={'track' + (phase === 'q' && timeLeft <= 3 ? ' urgent' : '')}><i style={{ width: `${phase === 'q' && cur ? Math.max(0, 1 - within / q.limit) * 100 : 0}%`, transition: 'width .1s linear' }} /></div>}
           {(phase === 'q' || phase === 'reveal') && <div className="combo">{phase === 'q' ? `${timeLeft} s` : `${k + 1}/${N_Q}`}</div>}
         </div>
 
         {(phase === 'wait' || phase === 'lobby') && (
           <motion.div className="qcard glass a-lobby" initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }}>
-            <div className="qmeta"><span className="k live"><i />V živo</span><span><Users size={14} /> {visible.length}/{ROOM_SIZE}</span></div>
+            <div className="qmeta"><span className="k live"><i />Live</span><span><Users size={14} /> {visible.length}/{ROOM_SIZE}</span></div>
             <div className="a-count num">{phase === 'wait' ? '…' : lobbyLeft}</div>
-            <div className="a-sub">{phase === 'wait' ? 'Povezujem …' : visible.length < ROOM_SIZE ? 'Iščem igralce …' : 'Soba je polna, začenjamo'}</div>
+            <div className="a-sub">{phase === 'wait' ? 'Connecting …' : visible.length < ROOM_SIZE ? 'Looking for players …' : 'The room is full, starting'}</div>
             <div className="a-players">
               <AnimatePresence>
                 {visible.map((p) => (
                   <motion.div key={p.id} className={'a-pl' + (p.id === me.id ? ' me' : '')} initial={{ opacity: 0, scale: 0.6 }} animate={{ opacity: 1, scale: 1 }} transition={{ type: 'spring', stiffness: 500, damping: 26 }}>
-                    <Av p={p} size={46} /><span>{p.id === me.id ? 'Ti' : p.name}</span>
+                    <Av p={p} size={46} /><span>{p.id === me.id ? 'You' : p.name}</span>
                   </motion.div>
                 ))}
               </AnimatePresence>
             </div>
-            <p className="tiny muted" style={{ textAlign: 'center', margin: '16px 0 0' }}>8 vprašanj šestih vrst. Daljše naloge imajo več časa, ko odgovorijo vsi, gremo takoj naprej. Hitreje ko odgovoriš pravilno, več točk.{!online && ' Povezava v živo ni uspela, igraš proti tekmecem v sobi.'}</p>
+            <p className="tiny muted" style={{ textAlign: 'center', margin: '16px 0 0' }}>8 questions of six types. Longer tasks get more time, and once everyone has answered we move on. The faster you answer correctly, the more points you get.{!online && ' The live connection failed, you are playing against the opponents in the room.'}</p>
           </motion.div>
         )}
 
         {q && (phase === 'q' || phase === 'reveal') && (
           <AnimatePresence mode="wait">
             <motion.div key={k} className="qcard glass a-q" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.25 }}>
-              <div className="qmeta"><span className="k live"><i />{q.label}</span><span>{answeredN}/{players.length} odgovorilo</span></div>
+              <div className="qmeta"><span className="k live"><i />{q.label}</span><span>{answeredN}/{players.length} answered</span></div>
               {q.kind === 'listen' && (
                 <div className="dict-btns" style={{ marginTop: 14 }}>
-                  <button className="dict-play" onClick={() => speakVerb(q.vid!, q.vid!)} aria-label="Predvajaj znova"><Volume2 /></button>
+                  <button className="dict-play" onClick={() => speakVerb(q.vid!, q.vid!)} aria-label="Play again"><Volume2 /></button>
                 </div>
               )}
               {q.img ? <div className="pic-stage"><PicImg id={q.img} size={150} /></div>
@@ -253,15 +253,15 @@ export function Arena({ onClose }: { onClose: () => void }) {
                 <div className="a-type">
                   {phase === 'q' && !myAns ? (
                     <>
-                      <Kinetic value={typed} onChange={setTyped} onEnter={submitTyped} status="idle" correct={q.options[0]} enterKeyHint="go" ariaLabel="Odgovor" />
-                      <button className="btn primary" onClick={submitTyped} disabled={!typed.trim()}><Send />Oddaj</button>
+                      <Kinetic value={typed} onChange={setTyped} onEnter={submitTyped} status="idle" correct={q.options[0]} enterKeyHint="go" ariaLabel="Answer" />
+                      <button className="btn primary" onClick={submitTyped} disabled={!typed.trim()}><Send />Submit</button>
                     </>
                   ) : (
                     <div className={'a-typed' + (phase === 'reveal' ? (myAns?.c === 0 ? ' ok' : ' bad') : '')} lang="en">
-                      {phase === 'reveal' ? <>Pravilno: <b>{(q.accept || [q.options[0]]).slice(0, 3).join(' / ')}</b></> : 'Odgovor oddan'}
+                      {phase === 'reveal' ? <>Correct: <b>{(q.accept || [q.options[0]]).slice(0, 3).join(' / ')}</b></> : 'Answer submitted'}
                     </div>
                   )}
-                  {phase === 'reveal' && <div className="a-dist-line">{players.filter((p) => ansOf(p, k)?.c === 0).length} od {players.length} pravilno</div>}
+                  {phase === 'reveal' && <div className="a-dist-line">{players.filter((p) => ansOf(p, k)?.c === 0).length} od {players.length} correct</div>}
                 </div>
               ) : (
                 <div className={'a-opts' + (q.options.length === 2 ? ' two' : '')}>
@@ -278,17 +278,17 @@ export function Arena({ onClose }: { onClose: () => void }) {
                   })}
                 </div>
               )}
-              {phase === 'q' && myAns && <div className="a-wait">Odgovor oddan. Čakam ostale …</div>}
+              {phase === 'q' && myAns && <div className="a-wait">Answer submitted. Waiting for the others …</div>}
               {phase === 'reveal' && (
                 <motion.div className="a-reveal" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
                   <div className={'a-gain' + (myAns && myAns.c === q.correct ? ' ok' : ' bad')}>
-                    {myAns ? (myAns.c === q.correct ? `+${scores.get(me.id)?.last || 0}` : 'Napačno') : 'Brez odgovora'}
-                    {(scores.get(me.id)?.streak || 0) >= 2 && <small><Zap size={13} /> niz {scores.get(me.id)?.streak}</small>}
+                    {myAns ? (myAns.c === q.correct ? `+${scores.get(me.id)?.last || 0}` : 'Wrong') : 'No answer'}
+                    {(scores.get(me.id)?.streak || 0) >= 2 && <small><Zap size={13} /> streak {scores.get(me.id)?.streak}</small>}
                   </div>
                   <ol className="a-rank">
                     {ranked.slice(0, ROOM_SIZE).map((p, i) => (
                       <motion.li layout key={p.id} className={p.id === me.id ? 'me' : ''} transition={{ type: 'spring', stiffness: 420, damping: 34 }}>
-                        <b>{i + 1}</b><Av p={p} size={28} /><span>{p.id === me.id ? 'Ti' : p.name}</span><em className="num">{scores.get(p.id)?.score || 0}</em>
+                        <b>{i + 1}</b><Av p={p} size={28} /><span>{p.id === me.id ? 'You' : p.name}</span><em className="num">{scores.get(p.id)?.score || 0}</em>
                       </motion.li>
                     ))}
                   </ol>
@@ -300,12 +300,12 @@ export function Arena({ onClose }: { onClose: () => void }) {
 
         {phase === 'end' && (
           <motion.div className="qcard glass a-end" initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }}>
-            <div className="qmeta"><span className="k place">Konec igre</span><span>{myPlace}. mesto</span></div>
+            <div className="qmeta"><span className="k place">Game over</span><span>{myPlace}. place</span></div>
             <div className="podium">
               {[1, 0, 2].map((idx) => ranked[idx] && (
                 <motion.div key={ranked[idx].id} className={'pod p' + (idx + 1) + (ranked[idx].id === me.id ? ' me' : '')} initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 + (2 - idx) * 0.2, type: 'spring', stiffness: 300, damping: 24 }}>
                   <Av p={ranked[idx]} size={idx === 0 ? 56 : 46} />
-                  <span>{ranked[idx].id === me.id ? 'Ti' : ranked[idx].name}</span>
+                  <span>{ranked[idx].id === me.id ? 'You' : ranked[idx].name}</span>
                   <em className="num">{scores.get(ranked[idx].id)?.score || 0}</em>
                   <div className="step">{idx === 0 ? <Trophy /> : idx + 1}</div>
                 </motion.div>
@@ -313,13 +313,13 @@ export function Arena({ onClose }: { onClose: () => void }) {
             </div>
             <ol className="a-rank" style={{ marginTop: 14 }}>
               {ranked.slice(3).map((p, i) => (
-                <li key={p.id} className={p.id === me.id ? 'me' : ''}><b>{i + 4}</b><Av p={p} size={28} /><span>{p.id === me.id ? 'Ti' : p.name}</span><em className="num">{scores.get(p.id)?.score || 0}</em></li>
+                <li key={p.id} className={p.id === me.id ? 'me' : ''}><b>{i + 4}</b><Av p={p} size={28} /><span>{p.id === me.id ? 'You' : p.name}</span><em className="num">{scores.get(p.id)?.score || 0}</em></li>
               ))}
             </ol>
-            <div className="a-xp"><Zap /> +{xpWon} XP · {scores.get(me.id)?.correct || 0}/{N_Q} pravilnih</div>
+            <div className="a-xp"><Zap /> +{xpWon} XP · {scores.get(me.id)?.correct || 0}/{N_Q} correct</div>
             <div className="row" style={{ marginTop: 16 }}>
-              <button className="btn" onClick={onClose}>Končaj</button>
-              <button className="btn primary" onClick={() => { onClose(); setTimeout(() => window.dispatchEvent(new Event('el:arena')), 350) }}><RotateCcw />Nova igra</button>
+              <button className="btn" onClick={onClose}>Finish</button>
+              <button className="btn primary" onClick={() => { onClose(); setTimeout(() => window.dispatchEvent(new Event('el:arena')), 350) }}><RotateCcw />New game</button>
             </div>
           </motion.div>
         )}
